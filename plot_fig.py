@@ -8,7 +8,9 @@ from components import *
 
 
 class GalfitPlot:
-    def __init__(self, model, mask, components=None, pixel_scale=1, zeropoint=0, center_position=None, title=None):
+    def __init__(self, model, mask, components=None, pixel_scale=1, zeropoint=0,
+                 center_position=None, title=None, sma_init=100, eps_init=0.5,
+                 pa_init=0, minsma=5, maxsma=None, step=0.05, fix_center=False):
         self.__model__ = model
         self.__mask__ = mask
         self.__components__ = components
@@ -16,6 +18,21 @@ class GalfitPlot:
         self.__cen_pos__ = center_position
         self.__pixel_scale__ = pixel_scale
         self.__zeropoint__ = zeropoint
+        self._sma = sma_init
+        self._eps = eps_init
+        self._pa = pa_init
+        self._minsma = minsma
+        self._maxsma = maxsma
+        self._step = step
+        self._fix_center = fix_center
+
+        if self.__components__ is not None:
+            for hdu in fits.open(self.__components__):
+                if hdu.header['OBJECT'] == 'sky':
+                    self._sky = hdu.data
+                    break
+        else:
+            self._sky = None
 
     def __plot_model__(self, hdu, ax, cut_coeff=None, min_max=None, is_origin=False):
         data = hdu.data
@@ -36,24 +53,29 @@ class GalfitPlot:
                                   stretch=vis.LogStretch(), clip=True)
         ax.imshow(data, cmap='gray', origin='lower', norm=norm)
 
-    def __plot_1Dpro__(self, hdu, axs, types, label=None, is_origin=False, show_iso=False):
+    def __plot_1Dpro__(self, hdu, axs, types, label=None, is_origin=False,
+                       is_comp=False, show_iso=False):
         data = hdu.data
         if is_origin:
             with fits.open(self.__mask__) as mask:
-                mask_data = mask[0].data
-                data = data * (1-mask_data)
+                data = np.ma.array(data, mask=(mask[0].data == 1))
+
+        if (self._sky is not None) and (not is_comp):
+            data -= self._sky
+
         if self.__cen_pos__ is None:
             x0 = data.shape[0] / 2
             y0 = data.shape[1] / 2
         else:
             x0, y0 = self.__cen_pos__
-        sma = 100
-        eps = 0.5
-        pa = 0
-        geometry = iso.EllipseGeometry(x0=x0, y0=y0, sma=sma, eps=eps, pa=pa)
+
+        geometry = iso.EllipseGeometry(x0=x0, y0=y0, sma=self._sma,
+                                       eps=self._eps, pa=self._pa)
         ellipse = iso.Ellipse(data, geometry=geometry)
         # ellipse = iso.Ellipse(data)
-        isolist = ellipse.fit_image(minsma=5, maxsma=600, step=0.05)
+        isolist = ellipse.fit_image(
+            minsma=self._minsma, maxsma=self._maxsma, step=self._step,
+            fix_center=self._fix_center)
         sma_list = isolist.sma
         sma_list = sma_list * self.__pixel_scale__
 
@@ -61,14 +83,26 @@ class GalfitPlot:
         intens_err = isolist.int_err
         mu = -2.5 * np.log10(intens) + self.__zeropoint__
         mu_err = 2.5 / np.log(10) * intens_err / intens
+        pa = (isolist.pa * 180 / np.pi - 90) % 180
 
-        out_list = {'pa': isolist.pa * 180 / np.pi, 'pa_err': isolist.pa_err * 180 / np.pi,
+        out_list = {'pa': pa, 'pa_err': isolist.pa_err * 180 / np.pi,
                     'eps': isolist.eps, 'eps_err': isolist.ellip_err,
                     'mu': mu, 'mu_err': mu_err}
         for ax, type in zip(axs, types):
             if is_origin:
                 ax.errorbar(sma_list, out_list[type], out_list[type+'_err'], fmt='o',
                             markersize=2, markeredgewidth=0.5, capsize=3, label=label)
+                if type == 'pa':
+                    ax.set_ylim(0, 180)
+                elif type == 'eps':
+                    ax.set_ylim(0, 1)
+                elif type == 'mu':
+                    ymargin = np.ptp(out_list['mu']) * 0.1
+                    ymin = np.min(out_list['mu']) - ymargin
+                    ymax = np.max(out_list['mu']) + ymargin
+                    xmax = np.max(sma_list) * 1.1
+                    ax.set_xlim(0, xmax)
+                    ax.set_ylim(ymax, ymin)
             else:
                 ax.plot(sma_list, out_list[type],
                         label=label, linestyle='--', linewidth=0.5)
@@ -94,20 +128,24 @@ class GalfitPlot:
         with fits.open(self.__model__) as model:
             for hdu in model[1:]:
                 type = hdu.header['OBJECT']
+
                 type.strip()
                 if type == 'model':
+                    print(f'Working on {type}')
                     self.__plot_model__(hdu, axs[1, 1], cut_coeff=cut_coeff)
                     if pro_1D:
                         self.__plot_1Dpro__(
-                            hdu, axs[:, 0], ['eps', 'eps', 'mu'], label='model')
+                            hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='model')
                 elif type == 'residual map':
+                    print(f'Working on {type}')
                     self.__plot_model__(hdu, axs[2, 1], cut_coeff=cut_coeff)
                 else:
+                    print(f'Working on original data')
                     self.__plot_model__(
                         hdu, axs[0, 1], cut_coeff=cut_coeff, is_origin=True)
                     if pro_1D:
                         self.__plot_1Dpro__(
-                            hdu, axs[:, 0], ['eps', 'eps', 'mu'], label='origin', is_origin=True, show_iso=True)
+                            hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='origin', is_origin=True, show_iso=True)
 
         if self.__components__ is not None and pro_1D:
             with fits.open(self.__components__) as comps:
@@ -118,7 +156,8 @@ class GalfitPlot:
                         continue
                     if type in component_names:
                         self.__plot_1Dpro__(
-                            hdu, axs[2:, 0], ['mu'], label=type+str(i))
+                            hdu, axs[2:, 0], ['mu'], label=type+str(i),
+                            is_comp=True)
 
         axs[2, 0].legend()
         axs[0, 0].set_ylabel('$\epsilon$')
@@ -130,7 +169,6 @@ class GalfitPlot:
         axs[0, 0].set_xticks([])
         axs[1, 0].set_xticks([])
         axs[2, 0].set_xlabel('Radius (arcsec)')
-        axs[2, 0].invert_yaxis()
 
         # plt.show()
         fig_file = self.__model__.replace('.fits', '.pdf')

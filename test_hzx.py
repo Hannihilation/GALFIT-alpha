@@ -8,7 +8,7 @@ if __name__ == '__main__':
 
     os_name = platform.system()
     if os_name == 'Darwin':
-        work_dir = './python/astronomy/'
+        work_dir = './'
     elif os_name == 'Linux':
         work_dir = './'
     input = work_dir+'CGS/'+name+'/'+name+'_R_reg.fits'
