@@ -11,13 +11,13 @@ class GalfitPlot:
     def __init__(self, model, mask, components=None, pixel_scale=1, zeropoint=0,
                  center_position=None, title=None, sma_init=100, eps_init=0.5,
                  pa_init=0, minsma=5, maxsma=None, step=0.05, fix_center=False):
-        self.__model__ = model
-        self.__mask__ = mask
-        self.__components__ = components
-        self.__title__ = title
-        self.__cen_pos__ = center_position
-        self.__pixel_scale__ = pixel_scale
-        self.__zeropoint__ = zeropoint
+        self._model = model
+        self._mask = mask
+        self._components = components
+        self._title = title
+        self._cen_pos = center_position
+        self._pixel_scale = pixel_scale
+        self._zeropoint = zeropoint
         self._sma = sma_init
         self._eps = eps_init
         self._pa = pa_init
@@ -26,18 +26,18 @@ class GalfitPlot:
         self._step = step
         self._fix_center = fix_center
 
-        if self.__components__ is not None:
-            for hdu in fits.open(self.__components__):
+        if self._components is not None:
+            for hdu in fits.open(self._components):
                 if hdu.header['OBJECT'] == 'sky':
                     self._sky = hdu.data
                     break
         else:
             self._sky = None
 
-    def __plot_model__(self, hdu, ax, cut_coeff=None, min_max=None, is_origin=False):
+    def _plot_model(self, hdu, ax, cut_coeff=None, min_max=None, is_origin=False):
         data = hdu.data
         if is_origin:
-            with fits.open(self.__mask__) as mask:
+            with fits.open(self._mask) as mask:
                 mask_data = mask[0].data
                 data = data * (1-mask_data)
         min_value = np.min(data)
@@ -53,21 +53,21 @@ class GalfitPlot:
                                   stretch=vis.LogStretch(), clip=True)
         ax.imshow(data, cmap='gray', origin='lower', norm=norm)
 
-    def __plot_1Dpro__(self, hdu, axs, types, label=None, is_origin=False,
-                       is_comp=False, show_iso=False):
+    def _plot_1Dpro(self, hdu, axs, types, label=None, is_origin=False,
+                    is_comp=False, show_iso=False):
         data = hdu.data
         if is_origin:
-            with fits.open(self.__mask__) as mask:
+            with fits.open(self._mask) as mask:
                 data = np.ma.array(data, mask=(mask[0].data == 1))
 
         if (self._sky is not None) and (not is_comp):
             data -= self._sky
 
-        if self.__cen_pos__ is None:
+        if self._cen_pos is None:
             x0 = data.shape[0] / 2
             y0 = data.shape[1] / 2
         else:
-            x0, y0 = self.__cen_pos__
+            x0, y0 = self._cen_pos
 
         geometry = iso.EllipseGeometry(x0=x0, y0=y0, sma=self._sma,
                                        eps=self._eps, pa=self._pa)
@@ -77,11 +77,11 @@ class GalfitPlot:
             minsma=self._minsma, maxsma=self._maxsma, step=self._step,
             fix_center=self._fix_center)
         sma_list = isolist.sma
-        sma_list = sma_list * self.__pixel_scale__
+        sma_list = sma_list * self._pixel_scale
 
         intens = isolist.intens
         intens_err = isolist.int_err
-        mu = -2.5 * np.log10(intens) + self.__zeropoint__
+        mu = -2.5 * np.log10(intens) + self._zeropoint
         mu_err = 2.5 / np.log(10) * intens_err / intens
         pa = (isolist.pa * 180 / np.pi - 90) % 180
 
@@ -110,7 +110,7 @@ class GalfitPlot:
         if show_iso:
             fig = plt.figure()
             ax = fig.add_subplot()
-            self.__plot_model__(hdu, ax, cut_coeff=99.5)
+            self._plot_model(hdu, ax, cut_coeff=99.5)
             for i in range(5, len(sma_list), 5):
                 aper = EllipticalAperture((isolist.x0[i], isolist.y0[i]),
                                           isolist.sma[i], isolist.sma[i] *
@@ -125,37 +125,37 @@ class GalfitPlot:
         gs = GridSpec(3, 2, figure=fig, hspace=0, wspace=0)
         axs = np.array([[fig.add_subplot(gs[i, j])
                        for j in range(2)] for i in range(3)])
-        with fits.open(self.__model__) as model:
+        with fits.open(self._model) as model:
             for hdu in model[1:]:
                 type = hdu.header['OBJECT']
 
                 type.strip()
                 if type == 'model':
                     print(f'Working on {type}')
-                    self.__plot_model__(hdu, axs[1, 1], cut_coeff=cut_coeff)
+                    self._plot_model(hdu, axs[1, 1], cut_coeff=cut_coeff)
                     if pro_1D:
-                        self.__plot_1Dpro__(
+                        self._plot_1Dpro(
                             hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='model')
                 elif type == 'residual map':
                     print(f'Working on {type}')
-                    self.__plot_model__(hdu, axs[2, 1], cut_coeff=cut_coeff)
+                    self._plot_model(hdu, axs[2, 1], cut_coeff=cut_coeff)
                 else:
                     print(f'Working on original data')
-                    self.__plot_model__(
+                    self._plot_model(
                         hdu, axs[0, 1], cut_coeff=cut_coeff, is_origin=True)
                     if pro_1D:
-                        self.__plot_1Dpro__(
+                        self._plot_1Dpro(
                             hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='origin', is_origin=True, show_iso=True)
 
-        if self.__components__ is not None and pro_1D:
-            with fits.open(self.__components__) as comps:
+        if self._components is not None and pro_1D:
+            with fits.open(self._components) as comps:
                 for i, hdu in enumerate(comps[1:]):
                     type = hdu.header['OBJECT']
                     type.strip()
                     if type == 'sky':
                         continue
                     if type in component_names:
-                        self.__plot_1Dpro__(
+                        self._plot_1Dpro(
                             hdu, axs[2:, 0], ['mu'], label=type+str(i),
                             is_comp=True)
 
@@ -171,7 +171,7 @@ class GalfitPlot:
         axs[2, 0].set_xlabel('Radius (arcsec)')
 
         # plt.show()
-        fig_file = self.__model__.replace('.fits', '.pdf')
+        fig_file = self._model.replace('.fits', '.pdf')
         fig.savefig(fig_file, format='pdf')
 
     # def plot(self, cut_coeff=99.5, pro_1D=True):
@@ -219,14 +219,14 @@ class GalfitPlot:
     #     plt.savefig(fig_file, format='pdf')
 
     def plot_comps(self, cut_coeff=99.5):
-        if self.__components__ is None:
+        if self._components is None:
             return
-        with fits.open(self.__components__) as comps:
+        with fits.open(self._components) as comps:
             length = len(comps)
             fig, ax = plt.subplots(1, length)
             for i, hdu in enumerate(comps):
-                self.__plot_model__(hdu, ax[i], cut_coeff=cut_coeff)
+                self._plot_model(hdu, ax[i], cut_coeff=cut_coeff)
             plt.legend()
             # plt.show()
-            fig_file = self.__model__.replace('.fits', '_comps.pdf')
+            fig_file = self._model.replace('.fits', '_comps.pdf')
             plt.savefig(fig_file, format='pdf')

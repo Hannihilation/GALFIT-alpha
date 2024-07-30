@@ -1,4 +1,5 @@
 CGS/
-galfit*
+galfit.*
+galfit
 *.fits
 .DS_Store
