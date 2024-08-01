@@ -3,3 +3,4 @@ galfit.*
 galfit
 *.fits
 .DS_Store
+fig/
