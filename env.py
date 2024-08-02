@@ -1,5 +1,6 @@
 from graphviz import Digraph
 from typing import Union
+from weakref import WeakValueDictionary
 
 
 class State:
