@@ -1,6 +1,9 @@
-from graphviz import Digraph
-from typing import Union
 from weakref import WeakValueDictionary
+from typing import Union
+import platform
+os_name = platform.system()
+if os_name == 'Darwin':
+    from graphviz import Digraph
 
 
 class State:
@@ -24,11 +27,12 @@ class State:
     def add_successor(self, successor: 'State'):
         self._successor.append(successor)
 
-    def plot(self, dot: Digraph):
-        dot.node(self.name, f'{self.name}\nr={self.reward}')
-        for successor in self._successor:
-            successor.plot(dot)
-            dot.edge(self.name, successor.name)
+    if os_name == 'Darwin':
+        def plot(self, dot: Digraph):
+            dot.node(self.name, f'{self.name}\nr={self.reward}')
+            for successor in self._successor:
+                successor.plot(dot)
+                dot.edge(self.name, successor.name)
 
 
 class GalfitEnv:
@@ -45,15 +49,16 @@ class GalfitEnv:
             parents.add_successor(state)
         self._states.append(state)
 
-    def plot(self):
-        dot = Digraph(comment='Galfit Environment')
-        self._root.plot(dot)
-        dot.render('fig/galfit_env', view=True, format='pdf')
+    if os_name == 'Darwin':
+        def plot(self):
+            dot = Digraph(comment='Galfit Environment')
+            self._root.plot(dot)
+            dot.render('fig/galfit_env', view=True, format='pdf')
 
     def do_action(self, action: int):
         pass
 
 
-if __name__ == '__main__':
+if __name__ == '__main__' and os_name == 'Darwin':
     env = GalfitEnv()
     env.plot()
