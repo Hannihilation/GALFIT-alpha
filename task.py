@@ -3,6 +3,13 @@ from astropy.io import fits
 import subprocess
 
 
+def _read_header(hdu, key):
+    if key in hdu.header:
+        return hdu.header[key]
+    else:
+        return hdu.header['_'+key[1:]]
+
+
 class Config:
     def __init__(self, input_file, output_file=None, psf_file='none', sigma_file='none', mask_file='none'):
         self._input = StrParam('A', input_file)
@@ -15,21 +22,21 @@ class Config:
         self._mode = StrParam('P', 0)
         input_file = fits.open(self._input.value)
         psf_file = fits.open(self._psf.value)
-        scale = self._read_header(psf_file[0], 'SCALE')
+        scale = _read_header(psf_file[0], 'SCALE')
         self._psf_scale = StrParam('E', scale)
         self._constrains = StrParam('G', 'none')
-        in_s1 = self._read_header(input_file[0], 'NAXIS1')
-        in_s2 = self._read_header(input_file[0], 'NAXIS2')
+        in_s1 = _read_header(input_file[0], 'NAXIS1')
+        in_s2 = _read_header(input_file[0], 'NAXIS2')
         self._image_region = StrParam('H', f"1 {in_s1} 1 {in_s2}")
-        psf_s1 = self._read_header(psf_file[0], 'NAXIS1')
-        psf_s2 = self._read_header(psf_file[0], 'NAXIS2')
+        psf_s1 = _read_header(psf_file[0], 'NAXIS1')
+        psf_s2 = _read_header(psf_file[0], 'NAXIS2')
         self._convolution_size = StrParam('I', f"{psf_s1} {psf_s2}")
-        zp = self._read_header(input_file[0], 'ZPT_GSC')
+        zp = _read_header(input_file[0], 'ZPT_GSC')
         self._zeropoint = StrParam('J', zp)
-        cd11 = self._read_header(input_file[0], 'CD1_1')
-        cd12 = self._read_header(input_file[0], 'CD1_2')
-        cd21 = self._read_header(input_file[0], 'CD2_1')
-        cd22 = self._read_header(input_file[0], 'CD2_2')
+        cd11 = _read_header(input_file[0], 'CD1_1')
+        cd12 = _read_header(input_file[0], 'CD1_2')
+        cd21 = _read_header(input_file[0], 'CD2_1')
+        cd22 = _read_header(input_file[0], 'CD2_2')
         dx = np.sqrt(cd11**2+cd12**2)
         dy = np.sqrt(cd21**2+cd22**2)
         self._pixel_scale = StrParam('K', f"{dx} {dy}")
@@ -39,12 +46,6 @@ class Config:
         self.parameters = [self._input, self._output, self._sigma, self._psf,
                            self._psf_scale, self._mask, self._constrains, self._image_region,
                            self._convolution_size, self._zeropoint, self._pixel_scale, self._display_type, self._mode]
-
-    def _read_header(self, hdu, key):
-        if key in hdu.header:
-            return hdu.header[key]
-        else:
-            return hdu.header['_'+key[1:]]
 
     @property
     def galfit_mode(self):
@@ -123,3 +124,6 @@ class GalfitTask:
         with open(galfit_file, 'w') as file:
             print(self, file=file)
         subprocess.run(['./galfit', galfit_file], check=True)
+
+    def init_guess(self):
+        pass
