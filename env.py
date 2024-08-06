@@ -30,7 +30,7 @@ class GalfitEnv:
 
     def _update_state(self):
         self._task.run()
-        self.chi2 = self._task.read_component('./galfit.01')
+        self._chi2 = self._task.read_component('./galfit.01')
         shutil.rmtree('./galfit.01')
 
     def do_action(self, action: int):
@@ -52,6 +52,11 @@ class GalfitEnv:
                     break
         if change_flag:
             self._update_state()
+        return self.current_state, self.reward
+
+    @property
+    def reward(self):
+        pass
 
     @property
     def current_state(self):
