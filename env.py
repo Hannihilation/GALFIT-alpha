@@ -43,8 +43,15 @@ class GalfitEnv:
                     change_flag = True
                 break
             action -= comp.state_num
-        if action < 3 and action >= 0:
-            sersic = _split_comp(self._task.components[action])
+        if action >= 0:
+            for comp in self._task.components:
+                sersic = _split_comp(self._task.components[action], action % 4)
+                if sersic is not None:
+                    self._task.add_component(sersic)
+                    change_flag = True
+                    break
+        if change_flag:
+            self._update_state()
 
     @property
     def current_state(self):
