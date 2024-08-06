@@ -11,13 +11,17 @@ def _read_header(hdu, key):
 
 
 class Config:
-    def __init__(self, input_file, output_file=None, psf_file='none', sigma_file='none', mask_file='none'):
+    def __init__(self, input_file, output_file=None, psf_file=None, sigma_file='none', mask_file=None):
         self._input = StrParam('A', input_file)
         if output_file is None:
-            output_file = input_file.replace('.fit', '_out.fits')
+            output_file = input_file.replace('.fits', '_out.fits')
         self._output = StrParam('B', output_file)
+        if psf_file == None:
+            psf_file = input_file.replace('.fits', '_ep.fits')
         self._psf = StrParam('D', psf_file)
         self._sigma = StrParam('C', sigma_file)
+        if mask_file is None:
+            mask_file = input_file.replace('.fits', '_mm.fits')
         self._mask = StrParam('F', mask_file)
         self._mode = StrParam('P', 0)
         input_file = fits.open(self._input.value)
@@ -102,11 +106,14 @@ class GalfitTask:
         return s
 
     def read_component(self, file_name):
+        chi2 = -1
         self._components = []
         with open(file_name, 'r') as file:
             line = file.readline()
             while line:
                 line = line.lstrip()
+                if chi2 < 0 and line.startswith('#  Chi^2/nu = '):
+                    chi2 = float(line.split('=')[1].split(',')[0])
                 pos = line.find(')')
                 if len(line) > 0 and pos > 0:
                     if line[0] == '0':
@@ -115,6 +122,7 @@ class GalfitTask:
                         file = component.read(file)
                         self._components.append(component)
                 line = file.readline()
+        return chi2
 
     def run(self, galfit_file=None, galfit_mode=0):
         if galfit_file is None:
@@ -126,4 +134,15 @@ class GalfitTask:
         subprocess.run(['./galfit', galfit_file], check=True)
 
     def init_guess(self):
-        pass
+        with fits.open(self._config.__input__.value) as file:
+            sky = Sky()
+            sky.background = _read_header(file[0], 'SKY')
+            self.add_component(sky)
+            sersic = Sersic()
+            sersic.position = (float(_read_header(file[0], 'CEN_X')),
+                               float(_read_header(file[0], 'CEN_Y')))
+            sersic.magnitude = 20
+            sersic.effective_radius = 100
+            sersic.axis_ratio = 1-float(_read_header(file[0], 'ELL_E'))
+            sersic.position_angle = float(_read_header(file[0], 'ELL_PA'))
+            self.add_component(sersic)

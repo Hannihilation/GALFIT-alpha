@@ -148,6 +148,8 @@ class Anisotropic(Component):
 
 
 class Sersic(Anisotropic):
+    state_num = 4
+
     def __init__(self):
         super(Sersic, self).__init__("sersic")
         # __Anisotropic.__init__(self, "sersic")
@@ -192,6 +194,30 @@ class Sersic(Anisotropic):
     @axis_ratio.setter
     def axis_ratio(self, ratio: float):
         self.__axis_ratio__.value = ratio
+
+    @property
+    def state(self):
+        if self.__sersic_index__.trainable:
+            return 0
+        elif self.sersic_index == 1:
+            return 1
+        elif self.sersic_index == 4:
+            return 2
+        elif self.sersic_index == 0.5:
+            return 3
+        else:
+            return -1
+
+    @state.setter
+    def state(self, state: int):
+        if state == 0:
+            self.set_sersic_index(None, True)
+        elif state == 1:
+            self.set_sersic_index(1, False)
+        elif state == 2:
+            self.set_sersic_index(4, False)
+        elif state == 3:
+            self.set_sersic_index(0.5, False)
 
     def set_magnitude(self, magnitude: float = None, trainable=True):
         """
@@ -967,11 +993,13 @@ class PSF(Component):
 
 
 class Sky(Component):
+    state_num = 2
+
     def __init__(self):
         Component.__init__(self, "sky")
         self.__background__ = Parameter(1, 0, True)
-        self.__gradient_x__ = Parameter(2, 0, True)
-        self.__gradient_y__ = Parameter(3, 0, True)
+        self.__gradient_x__ = Parameter(2, 0, False)
+        self.__gradient_y__ = Parameter(3, 0, False)
         self.__parameters__ = [self.__background__, self.__gradient_x__,
                                self.__gradient_y__, self.__output_option__]
         self.__param_index__ = {'1': 0, '2': 1, '3': 2, 'Z': 3}
@@ -999,6 +1027,20 @@ class Sky(Component):
     @gradient_y.setter
     def gradient_y(self, sky_gradient_y: float):
         self.__gradient_y__.value = sky_gradient_y
+
+    @property
+    def state(self):
+        if self.__background__.trainable:
+            return 1
+        else:
+            return 0
+
+    @state.setter
+    def state(self, state: int):
+        if state == 0:
+            self.__background__.trainable = False
+        else:
+            self.__background__.trainable = True
 
     def set_background(self, sky_background: float = None, trainable=True):
         """
