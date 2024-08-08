@@ -56,8 +56,32 @@ class GalfitEnv:
 
     @property
     def reward(self):
-        pass
+        # Base reward, based on chi^2
+        def sigmoid(x):
+            return 1 / (1 + np.exp(-x))
+        out = sigmoid(10 * np.exp(-5 * self._chi2))
+        # Additional reward, based on sersic indices
+        count_sersic = 0
+        for comp in self._task.components:
+            if not isinstance(comp, Sersic):
+                continue
+            count_sersic += 1
+            if comp.state == 0:
+                if comp.sersic_index < 0.3 or comp.sersic_index > 7:
+                    out -= 0.5 # Sersic Index Penalty
+            if comp.amplitude > 14:
+                out -= 0.3 # Amplitude Penalty
+            if comp.effective_radius < 30 or comp.effective_radius > 400:
+                out -= 0.5 # Radius Penalty
 
     @property
     def current_state(self):
-        pass
+        out = np.ndarray([-1] * 4)
+        count_sersic = 0
+        for comp in self._task.components:
+            if isinstance(comp, Sky):
+                out[0] = comp.state
+            elif isinstance(comp, Sersic):
+                count_sersic += 1
+                out[count_sersic] = comp.state
+        return out
