@@ -39,13 +39,13 @@ class GalfitEnv:
             if action < comp.state_num:
                 if comp.state != action:
                     comp.state = action
-                    action -= comp.state_num
                     change_flag = True
+                action -= comp.state_num
                 break
             action -= comp.state_num
         if action >= 0:
             for comp in self._task.components:
-                sersic = _split_comp(self._task.components[action], action % 4)
+                sersic = _split_comp(comp, action % 4)
                 if sersic is not None:
                     self._task.add_component(sersic)
                     change_flag = True
