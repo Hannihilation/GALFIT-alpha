@@ -62,13 +62,25 @@ class GalfitEnv:
         out = sigmoid(10 * np.exp(-5 * self._chi2))
         # Additional reward, based on sersic indices
         count_sersic = 0
+        disk_bulge_bar = [0,0,0]
         for comp in self._task.components:
             if not isinstance(comp, Sersic):
                 continue
             count_sersic += 1
+            if comp.state == 1: disk_bulge_bar[0] += 1
+            if comp.state == 2: disk_bulge_bar[1] += 1
+            if comp.state == 3: disk_bulge_bar[2] += 1
             if comp.state == 0:
                 if comp.sersic_index < 0.3 or comp.sersic_index > 7:
                     out -= 0.5 # Sersic Index Penalty
+                elif comp.sersic_index <= 0.7:
+                    disk_bulge_bar[2] += 1
+                elif comp.sersic_index <= 2.5:
+                    disk_bulge_bar[0] += 1
+                else:
+                    disk_bulge_bar[1] += 1
+            if max(disk_bulge_bar) != 1:
+                out -= 0.5 # Sersic Index Penalty
             if comp.amplitude > 14:
                 out -= 0.3 # Amplitude Penalty
             if comp.effective_radius < 30 or comp.effective_radius > 400:
