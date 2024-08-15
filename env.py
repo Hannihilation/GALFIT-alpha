@@ -36,13 +36,13 @@ class GalfitEnv:
         self._chi2 = self._task.read_component('./galfit.01')
         shutil.rmtree('./galfit.01')
 
-    def do_action(self, action: int):
-        change_flag = False
+    def step(self, action: int):
+        done = True
         for comp in self._task.components:
             if action < comp.state_num:
                 if comp.state != action:
                     comp.state = action
-                    change_flag = True
+                    done = False
                 action -= comp.state_num
                 break
             action -= comp.state_num
@@ -51,11 +51,11 @@ class GalfitEnv:
                 sersic = _split_comp(comp, action % 4)
                 if sersic is not None:
                     self._task.add_component(sersic)
-                    change_flag = True
+                    done = False
                     break
-        if change_flag:
+        if not done:
             self._update_state()
-        return self.current_state, self.reward
+        return self.current_state, self.reward, done
 
     @property
     def reward(self):
