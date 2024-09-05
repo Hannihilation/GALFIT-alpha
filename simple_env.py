@@ -4,6 +4,7 @@ from components import *
 import shutil
 from copy import deepcopy
 from astropy.io import fits
+from torchvision import transforms
 
 # code_state = ['bulge', 'disk', 'bar', 'bulge&disk',
 #               'disk&bar', 'bulge&bar', 'bulge&disk&bar', 'error']
@@ -21,11 +22,12 @@ class GalfitEnv:
     chi2_weight = 20
     error_punish = 1
 
-    def __init__(self, input_file) -> None:
+    def __init__(self, input_file, image_size=2000) -> None:
         config = Config(input_file)
         self._task = GalfitTask(config)
         self._task.init_guess()
         self._update_state()
+        self._image_size = image_size
 
     def _update_state(self):
         self._task.run()
@@ -83,7 +85,7 @@ class GalfitEnv:
         :returns (current_state, reward, done)
         """
         if action == 4:
-            return 0, 0, True
+            return self.current_state, self.reward, True
         elif action == 0:
             self._task.component[0].__background__.trainable ^= 1
         elif action == 1:
@@ -95,7 +97,7 @@ class GalfitEnv:
                 if not c.__sersic_index__.trainable and c.sersic_index == 4:
                     c.set_sersic_index(trainable=True)
         self._update_state()
-        return self.current_state, self.reward, False
+        return self.current_state, self.reward, self._current_code == 0
 
     @property
     def reward(self):
@@ -110,11 +112,26 @@ class GalfitEnv:
 
     @property
     def current_state(self):
-        """
-        return state: [code, sky, residual, model]
-        """
         output_file = self._task.config.__output__.value
         with fits.open(output_file) as hdus:
             residual = hdus[3].data
             model = hdus[2].data
-        return [self._current_code, self._sky_state, residual, model]
+        image = np.array([residual, model])
+        image = transforms.Resize(self._image_size)(image)
+        return np.array([self._current_code, self._sky_state]), image
+
+    @property
+    def channel_num(self):
+        return 2
+
+    @property
+    def state_num(self):
+        return 2
+
+    @property
+    def action_num(self):
+        return 5
+
+    @property
+    def image_size(self):
+        return self._image_size
