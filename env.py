@@ -22,7 +22,7 @@ def _split_comp(targ_sersic: Sersic, fixed_index: float = None):
 
 
 class GalfitEnv:
-    chi2_weight = 50
+    chi2_weight = 20
 
     def __init__(self, input_file) -> None:
         config = Config(input_file)
@@ -83,7 +83,7 @@ class GalfitEnv:
                 r -= 0.5  # Sersic Index Penalty
             if comp.amplitude > 14:
                 r -= 0.3  # Amplitude Penalty
-            if comp.effective_radius < 30 or comp.effective_radius > 400:
+            if comp.effective_radius < 4 or comp.effective_radius > 400:
                 r -= 0.5  # Radius Penalty
 
     @property

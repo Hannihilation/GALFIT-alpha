@@ -66,6 +66,12 @@ class Config:
         return np.sqrt(dx**2+dy**2) * 3600
 
     @property
+    def image_size(self):
+        value = re.split(r'\s+', self._image_region.value)
+        s1, s2 = int(value[1]), int(value[3])
+        return s1, s2
+
+    @property
     def zeropoint(self):
         value = self._zeropoint.value
         if isinstance(value, str):
