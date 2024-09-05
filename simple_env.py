@@ -19,6 +19,7 @@ for i, s in enumerate(code_state):
 
 class GalfitEnv:
     chi2_weight = 20
+    error_punish = 1
 
     def __init__(self, input_file) -> None:
         config = Config(input_file)
@@ -104,7 +105,7 @@ class GalfitEnv:
         # out = sigmoid(10 * np.exp(-5 * self._chi2))
         r = (1 - self._chi2 / self._base_chi2) * self.chi2_weight
         if self._current_code == 0:
-            r -= 1
+            r -= self.error_punish
         return r
 
     @property

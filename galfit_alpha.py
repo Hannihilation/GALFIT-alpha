@@ -1,4 +1,4 @@
-from torch import nn
+from torch import nn, cat
 import numpy as np
 import copy
 import matplotlib.pyplot as plt
@@ -9,43 +9,39 @@ class GalfitAlpha(nn.Module):
         # channel 0: residue, channel 1: components
         # CNN subgraph:
         kernel_size = np.floor(fig_size/4)
-        self.Conv1 = nn.Conv2d(in_channels = fig_channel_num, out_channels = 5, kernel_size = 2 * kernel_size)
-        self.Conv2 = nn.Conv2d(in_channels = 5, out_channels = 20, kernel_size = kernel_size)
-        self.Conv3 = nn.Conv2d(in_channels = 20, out_channels = 10, kernel_size = fig_size - 3 * kernel_size + 2)
-        # State all-connected subgraph: 
-        self.LL1 = nn.Linear(in_features = state_num, out_features = 5)
-        self.LL2 = nn.Linear(in_features = 5, out_features = 5)
-        self.LL3 = nn.Linear(in_features = 5, out_features = 5)
+        self.Conv1 = nn.Conv2d(in_channels=fig_channel_num,
+                               out_channels=5, kernel_size=2 * kernel_size)
+        self.Conv2 = nn.Conv2d(
+            in_channels=5, out_channels=20, kernel_size=kernel_size)
+        self.Conv3 = nn.Conv2d(
+            in_channels=20, out_channels=10, kernel_size=fig_size - 3 * kernel_size + 2)
+        # State all-connected subgraph:
+        self.LL1 = nn.Linear(in_features=state_num, out_features=5)
+        self.LL2 = nn.Linear(in_features=5, out_features=5)
+        self.LL3 = nn.Linear(in_features=5, out_features=5)
         # Adding-up layer
-        self.OutL1 = nn.Linear(in_features = 15, out_features = 30)
-        self.OutL2 = nn.Linear(in_features = 30, out_features = 20)
-        self.OutL3 = nn.Linear(in_features = 20, out_features = n_action)
-        
+        self.OutL1 = nn.Linear(in_features=15, out_features=30)
+        self.OutL2 = nn.Linear(in_features=30, out_features=20)
+        self.OutL3 = nn.Linear(in_features=20, out_features=n_action)
+
         self.n_action = n_action
 
     def forward(self, state_code, figs):
         # ConvNN for figure:
         # channel 0: residue, channel 1: components
-        x1 = self.Conv1(figs)
-        x1 = nn.ReLu(x1)
-        x1 = self.Conv2(x1)
-        x1 = nn.ReLu(x1)
-        x1 = self.Conv3(x1)
-        x1 = x1.reshape(-1)
+        x1 = nn.ReLU(self.Conv1(figs))
+        x1 = nn.ReLU(self.Conv2(x1))
+        x1 = nn.ReLU(self.Conv3(x1))
+        x1 = x1.view(x1.size(0), -1)
         # LinearNN for state code
-        x2 = self.LL1(state_code)
-        x2 = nn.ReLu(x2)
-        x2 = self.LL2(x2)
-        x2 = nn.ReLu(x2)
-        x2 = self.LL3(x2)
+        x2 = nn.ReLU(self.LL1(state_code))
+        x2 = nn.ReLU(self.LL2(x2))
+        x2 = nn.ReLU(self.LL3(x2))
         # OutputNN
-        x = torch.cat(x1, x2)
-        x = nn.Relu(x)
-        x = self.OutL1(x)
-        x = nn.Relu(x)
-        x = self.OutL2(x)
-        x = nn.Relu(x)
-        x = self.OutL3(x)
+        x = cat(x1, x2)
+        x = nn.ReLU(self.OutL1(x))
+        x = nn.ReLU(self.OutL2(x))
+        x = nn.Sigmoid(self.OutL3(x))
         return x
 
     def fit(self, x, y, lr):
