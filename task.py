@@ -2,6 +2,8 @@ from components import *
 from astropy.io import fits
 import subprocess
 import os
+# from photutils.detection import DAOStarFinder
+from photutils.detection import IRAFStarFinder
 
 
 def _read_header(hdu, key):
@@ -146,10 +148,21 @@ class GalfitTask:
             sky.background = _read_header(file[0], 'SKY')
             self.add_component(sky)
             sersic = Sersic()
-            sersic.position = (float(_read_header(file[0], 'CEN_X')),
-                               float(_read_header(file[0], 'CEN_Y')))
-            sersic.magnitude = 20
-            sersic.effective_radius = 100
+            # Using photutils.detection to find initial stats
+            input_data = file[0].data
+            with fits.open(self.config._mask.value) as mask:
+                mask_data = mask[0].data
+            # with fits.open(self.config._psf.value) as psf:
+            #     psf_data = psf[0].data
+            iraffind = IRAFStarFinder(fwhm=eval(self.config._convolution_size)[0], threshold=5.*sky.background, sky = sky.background)   # 这里的参数如何设置？
+            sources = iraffind(input_data, mask = mask_data) 
+            ind = np.argmin(sources['mag'])
+            sersic.position = (sources['xcentroid'][ind], sources['ycentroid'][ind])
+            # sersic.position = (float(_read_header(file[0], 'CEN_X')),
+            #                    float(_read_header(file[0], 'CEN_Y')))
+            sersic.magnitude = sources['mag'][ind] + eval(self.config._zeropoint.value)
+            self._mag_baseline = sersic.magnitude # Save the initial magnitude
+            sersic.effective_radius = sources['fwhm'][ind] / 2 # 除以2得到半径？
             sersic.axis_ratio = 1-float(_read_header(file[0], 'ELL_E'))
             sersic.position_angle = float(_read_header(file[0], 'ELL_PA'))
             self.add_component(sersic)
