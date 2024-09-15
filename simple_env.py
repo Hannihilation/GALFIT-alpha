@@ -23,11 +23,13 @@ for i, s in enumerate(code_state):
 class GalfitEnv:
     chi2_weight = 20
     error_punish = 1
+    mag_maxgap = 5
 
     def __init__(self, input_file, image_size=2000) -> None:
         config = Config(input_file)
         self._task = GalfitTask(config)
-        # self._task.init_guess()
+        self._task.init_guess()
+        self._mag_limit = self._task._mag_baseline + self.mag_maxgap
         self._update_state()
         self._base_chi2 = self._chi2
         self._image_size = image_size
@@ -59,7 +61,7 @@ class GalfitEnv:
             if self._current_code & add_code:
                 self._current_code = 0
                 break
-            if c.magnitude > 14:
+            if c.magnitude > self._mag_limit: # 限定mag_limit 为 mag_baseline + mag_maxgap, 其中 mag_baseline 为初始 sersic 的 magnitude
                 self._current_code = 0
                 break
             if c.effective_radius < 2 or c.effective_radius > max(self._task.config.image_size) / 2:
