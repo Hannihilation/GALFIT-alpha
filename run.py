@@ -2,6 +2,7 @@ from simple_env import GalfitEnv
 from galfit_alpha import GalfitAlpha, DeepQLearning
 import platform
 import matplotlib.pyplot as plt
+import torch
 
 os_name = platform.system()
 if os_name == 'Darwin':
@@ -10,9 +11,11 @@ elif os_name == 'Linux':
     CGS_file = ('IC5240', 'NGC1326')
 pre_path = './CGS/'
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Training on {device}")
 
 if __name__ == '__main__':
-    Q_net = GalfitAlpha(2, 2, 2042, 5)
+    Q_net = GalfitAlpha(2, 2, 2042, 5, device)
     DQL = DeepQLearning(Q_net, 0.01, 0.9, 0.9, 1000, 32)
     step = 0
     for i in range(1000):

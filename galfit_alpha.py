@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 class GalfitAlpha(nn.Module):
-    def __init__(self, state_num, fig_channel_num, fig_size, n_action) -> None:
+    def __init__(self, state_num, fig_channel_num, fig_size, n_action, device) -> None:
         super(GalfitAlpha, self).__init__()
         self.state_num = state_num
         self.fig_channel_num = fig_channel_num
@@ -37,11 +37,14 @@ class GalfitAlpha(nn.Module):
         self.test_linear = nn.Linear(2, 5, dtype=float64)
         self.ReLU = nn.ReLU()
 
+        self.device = device
+        self.to(device)
+
     def forward_backup(self, state_code, figs):
         # ConvNN for figure:
         # channel 0: residue, channel 1: components
-        state_code = from_numpy(state_code)
-        figs = from_numpy(figs)
+        state_code = from_numpy(state_code).to(self.device)
+        figs = from_numpy(figs).to(self.device)
         print(figs.shape, state_code.shape)
         print(figs.dtype, state_code.dtype)
         x1 = self.ReLU(self.Conv1(figs))
@@ -60,7 +63,7 @@ class GalfitAlpha(nn.Module):
         return x
 
     def forward(self, state_code, figs):
-        x = from_numpy(state_code)
+        x = from_numpy(state_code).to(self.device)
         x = self.test_linear(x)
         return x
 
@@ -81,7 +84,7 @@ class GalfitAlpha(nn.Module):
 class DeepQLearning:
     def __init__(self, Q_net: nn.Module, learning_rate, reward_decay, e_greedy, memory_size, batch_size) -> None:
         self.eval_net = Q_net
-        self.target_net = copy.deepcopy(Q_net)
+        self.target_net = Q_net.detach().clone()
         self.action_dim = Q_net.n_action
         self.state_dim = Q_net.state_num
         self.lr = learning_rate
@@ -118,18 +121,14 @@ class DeepQLearning:
             batch_memory[:, :self.state_dim], image_batch_memory[:, 0, :, :, :])
         q_target = q_eval.detach().clone()
         eval_act_index = batch_memory[:, self.state_dim].astype(int)
-        reward = from_numpy(batch_memory[:, self.state_dim+1])
+        reward = from_numpy(
+            batch_memory[:, self.state_dim+1]).to(self.eval_net.device)
         q_target[:, eval_act_index] = reward + \
             self.gamma * q_next.detach().max(dim=1)[0]
         loss = self.eval_net.fit(
             batch_memory[:, :self.state_dim], image_batch_memory[:, 0, :, :, :], q_target, self.lr)
         self.loss_history.extend(loss)
-        # loss = nn.MSELoss()
-        # optimizer = nn.Adam(self.eval_net.parameters(), lr=self.lr)
-        # l = loss(q_eval, q_target)
-        # optimizer.zero_grad()
-        # l.backward()
-        # optimizer.step()
+        self.target_net = self.eval_net.detach().clone()
 
     def choose_action(self, s):
         if np.random.uniform() < self.epsilon:
