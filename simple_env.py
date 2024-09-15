@@ -120,13 +120,13 @@ class GalfitEnv:
     def current_state(self):
         output_file = self._task.config._output.value
         with fits.open(output_file) as hdus:
-            print(len(hdus))
+            print(len(hdus), output_file)
             residual = np.array(hdus[3].data)
             model = np.array(hdus[2].data)
-        image = np.array([residual, model])
+        image = np.array([residual, model], dtype=np.float64)
         # print(image.shape)
         # image = transforms.Resize(self._image_size)(Image.fromarray(image))
-        return np.array([self._current_code, self._sky_state]), image
+        return np.array([self._current_code, self._sky_state], dtype=np.float64), image
 
     @property
     def channel_num(self):

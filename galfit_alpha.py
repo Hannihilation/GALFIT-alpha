@@ -1,4 +1,4 @@
-from torch import nn, cat, from_numpy, float64
+from torch import nn, optim, cat, from_numpy, float64, max
 import numpy as np
 import copy
 import matplotlib.pyplot as plt
@@ -14,8 +14,9 @@ class GalfitAlpha(nn.Module):
         # channel 0: residue, channel 1: components
         # CNN subgraph:
         kernel_size = np.floor(fig_size/4).astype(np.int32)
+        print(kernel_size)
         self.Conv1 = nn.Conv2d(in_channels=fig_channel_num,
-                               out_channels=5, kernel_size=(2 * kernel_size, 2 * kernel_size), dtype=float64)
+                               out_channels=5, kernel_size=(5, 5), dtype=float64)
         self.Conv2 = nn.Conv2d(
             in_channels=5, out_channels=20, kernel_size=(kernel_size, kernel_size), dtype=float64)
         self.Conv3 = nn.Conv2d(
@@ -33,31 +34,40 @@ class GalfitAlpha(nn.Module):
         self.OutL3 = nn.Linear(
             in_features=20, out_features=n_action, dtype=float64)
 
-    def forward(self, state_code, figs):
+        self.test_linear = nn.Linear(2, 5, dtype=float64)
+        self.ReLU = nn.ReLU()
+
+    def forward_backup(self, state_code, figs):
         # ConvNN for figure:
         # channel 0: residue, channel 1: components
         state_code = from_numpy(state_code)
         figs = from_numpy(figs)
+        print(figs.shape, state_code.shape)
         print(figs.dtype, state_code.dtype)
-        x1 = nn.ReLU(self.Conv1(figs))
-        x1 = nn.ReLU(self.Conv2(x1))
-        x1 = nn.ReLU(self.Conv3(x1))
+        x1 = self.ReLU(self.Conv1(figs))
+        x1 = self.ReLU(self.Conv2(x1))
+        x1 = self.ReLU(self.Conv3(x1))
         x1 = x1.view(x1.size(0), -1)
         # LinearNN for state code
-        x2 = nn.ReLU(self.LL1(state_code))
-        x2 = nn.ReLU(self.LL2(x2))
-        x2 = nn.ReLU(self.LL3(x2))
+        x2 = self.ReLU(self.LL1(state_code))
+        x2 = self.ReLU(self.LL2(x2))
+        x2 = self.ReLU(self.LL3(x2))
         # OutputNN
-        x = cat(x1, x2)
-        x = nn.ReLU(self.OutL1(x))
-        x = nn.ReLU(self.OutL2(x))
-        x = nn.Sigmoid(self.OutL3(x))
+        x = cat(x1, x2, dim=1)
+        x = self.ReLU(self.OutL1(x))
+        x = self.ReLU(self.OutL2(x))
+        x = self.OutL3(x)
+        return x
+
+    def forward(self, state_code, figs):
+        x = from_numpy(state_code)
+        x = self.test_linear(x)
         return x
 
     def fit(self, state_code, figs, y, lr):
         loss_his = []
         loss = nn.MSELoss()
-        optimizer = nn.Adam(self.parameters(), lr=lr)
+        optimizer = optim.Adam(self.parameters(), lr=lr)
         for i in range(1000):
             output = self(state_code, figs)
             l = loss(output, y)
@@ -102,17 +112,15 @@ class DeepQLearning:
                 self.memory_counter, size=self.batch_size)
         batch_memory = self.memory[sample_index, :]
         image_batch_memory = self.image_memory[sample_index, :, :, :, :]
-        print(batch_memory[:, -self.state_dim:].shape,
-              image_batch_memory[:, 1, :, :, :].shape)
         q_next = self.target_net(
             batch_memory[:, -self.state_dim:], image_batch_memory[:, 1, :, :, :])
         q_eval = self.eval_net(
             batch_memory[:, :self.state_dim], image_batch_memory[:, 0, :, :, :])
-        q_target = q_eval.copy()
+        q_target = q_eval.detach().clone()
         eval_act_index = batch_memory[:, self.state_dim].astype(int)
-        reward = batch_memory[:, self.state_dim+1]
+        reward = from_numpy(batch_memory[:, self.state_dim+1])
         q_target[:, eval_act_index] = reward + \
-            self.gamma * np.max(q_next, axis=1)
+            self.gamma * q_next.detach().max(dim=1)[0]
         loss = self.eval_net.fit(
             batch_memory[:, :self.state_dim], image_batch_memory[:, 0, :, :, :], q_target, self.lr)
         self.loss_history.extend(loss)
@@ -127,8 +135,8 @@ class DeepQLearning:
         if np.random.uniform() < self.epsilon:
             action = np.random.choice(self.action_dim)
         else:
-            state_code = s[0].expand_dims(0)
-            figs = s[1].expand_dims(0)
+            state_code = np.expand_dims(s[0], 0)
+            figs = np.expand_dims(s[1], 0)
             action = self.eval_net(state_code, figs)
             action = np.argmax(action)
         return action

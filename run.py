@@ -29,5 +29,5 @@ if __name__ == '__main__':
                 break
             s = s_
             step += 1
-    plt.plot(DQL.loss_history)
-    plt.show()
+    DQL.eval_net.save('./model.pkl')
+    DQL.plot_loss()
