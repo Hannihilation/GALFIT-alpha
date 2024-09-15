@@ -1,6 +1,7 @@
 from components import *
 from astropy.io import fits
 import subprocess
+import os
 
 
 def _read_header(hdu, key):
@@ -132,7 +133,7 @@ class GalfitTask:
 
     def run(self, galfit_file=None, galfit_mode=0):
         if galfit_file is None:
-            galfit_file = self._config.__output__.value.replace(
+            galfit_file = self._config._output.value.replace(
                 '.fits', '.galfit')
         self.config.galfit_mode = galfit_mode
         with open(galfit_file, 'w') as file:
@@ -140,7 +141,7 @@ class GalfitTask:
         subprocess.run(['./galfit', galfit_file], check=True)
 
     def init_guess(self):
-        with fits.open(self._config.__input__.value) as file:
+        with fits.open(self._config._input.value) as file:
             sky = Sky()
             sky.background = _read_header(file[0], 'SKY')
             self.add_component(sky)

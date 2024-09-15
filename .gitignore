@@ -4,3 +4,4 @@ galfit
 *.fits
 .DS_Store
 fig/
+fit.log

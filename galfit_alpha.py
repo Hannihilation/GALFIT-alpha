@@ -1,4 +1,4 @@
-from torch import nn, cat
+from torch import nn, cat, from_numpy, float64
 import numpy as np
 import copy
 import matplotlib.pyplot as plt
@@ -6,31 +6,39 @@ import matplotlib.pyplot as plt
 
 class GalfitAlpha(nn.Module):
     def __init__(self, state_num, fig_channel_num, fig_size, n_action) -> None:
+        super(GalfitAlpha, self).__init__()
         self.state_num = state_num
         self.fig_channel_num = fig_channel_num
         self.fig_size = fig_size
         self.n_action = n_action
         # channel 0: residue, channel 1: components
         # CNN subgraph:
-        kernel_size = np.floor(fig_size/4)
+        kernel_size = np.floor(fig_size/4).astype(np.int32)
         self.Conv1 = nn.Conv2d(in_channels=fig_channel_num,
-                               out_channels=5, kernel_size=2 * kernel_size)
+                               out_channels=5, kernel_size=(2 * kernel_size, 2 * kernel_size), dtype=float64)
         self.Conv2 = nn.Conv2d(
-            in_channels=5, out_channels=20, kernel_size=kernel_size)
+            in_channels=5, out_channels=20, kernel_size=(kernel_size, kernel_size), dtype=float64)
         self.Conv3 = nn.Conv2d(
-            in_channels=20, out_channels=10, kernel_size=fig_size - 3 * kernel_size + 2)
+            in_channels=20, out_channels=10, kernel_size=(fig_size - 3 * kernel_size + 2, fig_size - 3 * kernel_size + 2), dtype=float64)
         # State all-connected subgraph:
-        self.LL1 = nn.Linear(in_features=state_num, out_features=5)
-        self.LL2 = nn.Linear(in_features=5, out_features=5)
-        self.LL3 = nn.Linear(in_features=5, out_features=5)
+        self.LL1 = nn.Linear(in_features=state_num,
+                             out_features=5, dtype=float64)
+        self.LL2 = nn.Linear(in_features=5, out_features=5, dtype=float64)
+        self.LL3 = nn.Linear(in_features=5, out_features=5, dtype=float64)
         # Adding-up layer
-        self.OutL1 = nn.Linear(in_features=15, out_features=30)
-        self.OutL2 = nn.Linear(in_features=30, out_features=20)
-        self.OutL3 = nn.Linear(in_features=20, out_features=n_action)
+        self.OutL1 = nn.Linear(
+            in_features=15, out_features=30, dtype=float64)
+        self.OutL2 = nn.Linear(
+            in_features=30, out_features=20, dtype=float64)
+        self.OutL3 = nn.Linear(
+            in_features=20, out_features=n_action, dtype=float64)
 
     def forward(self, state_code, figs):
         # ConvNN for figure:
         # channel 0: residue, channel 1: components
+        state_code = from_numpy(state_code)
+        figs = from_numpy(figs)
+        print(figs.dtype, state_code.dtype)
         x1 = nn.ReLU(self.Conv1(figs))
         x1 = nn.ReLU(self.Conv2(x1))
         x1 = nn.ReLU(self.Conv3(x1))
@@ -83,6 +91,7 @@ class DeepQLearning:
         self.memory[index, :] = transition
         self.image_memory[index, 0, :, :, :] = s[1]
         self.image_memory[index, 1, :, :, :] = s_[1]
+        self.memory_counter += 1
 
     def learn(self):
         if self.memory_counter > self.memory_size:
@@ -93,6 +102,8 @@ class DeepQLearning:
                 self.memory_counter, size=self.batch_size)
         batch_memory = self.memory[sample_index, :]
         image_batch_memory = self.image_memory[sample_index, :, :, :, :]
+        print(batch_memory[:, -self.state_dim:].shape,
+              image_batch_memory[:, 1, :, :, :].shape)
         q_next = self.target_net(
             batch_memory[:, -self.state_dim:], image_batch_memory[:, 1, :, :, :])
         q_eval = self.eval_net(

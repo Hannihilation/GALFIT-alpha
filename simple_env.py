@@ -5,6 +5,8 @@ import shutil
 from copy import deepcopy
 from astropy.io import fits
 from torchvision import transforms
+from PIL import Image
+import os
 
 # code_state = ['bulge', 'disk', 'bar', 'bulge&disk',
 #               'disk&bar', 'bulge&bar', 'bulge&disk&bar', 'error']
@@ -25,19 +27,21 @@ class GalfitEnv:
     def __init__(self, input_file, image_size=2000) -> None:
         config = Config(input_file)
         self._task = GalfitTask(config)
-        self._task.init_guess()
+        # self._task.init_guess()
         self._update_state()
+        self._base_chi2 = self._chi2
         self._image_size = image_size
 
     def _update_state(self):
-        self._task.run()
+        # self._task.run()
         self._chi2 = self._task.read_component('./galfit.01')
-        shutil.rmtree('./galfit.01')
-        self._sky_state = 0 if self._task.component[0].__background__.trainable else 1
+        # shutil.rmtree('./galfit.01')
+        # os.remove('./galfit.01')
+        self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
         self._current_code = 0
         bulge_radius = 0
         disk_radius = 10000
-        for c in self._task.component[1:]:
+        for c in self._task.components[1:]:
             if c.__sersic_index__.trainable:
                 if c.sersic_index > 7 or c.sersic_index < 2.5:
                     self._current_code = 0
@@ -55,10 +59,12 @@ class GalfitEnv:
             if self._current_code & add_code:
                 self._current_code = 0
                 break
-            if c.amplitude > 14:
-                r -= 0.3  # Amplitude Penalty
+            if c.magnitude > 14:
+                self._current_code = 0
+                break
             if c.effective_radius < 2 or c.effective_radius > max(self._task.config.image_size) / 2:
-                r -= 0.5  # Radius Penalty
+                self._current_code = 0
+                break
             self._current_code += add_code
         if bulge_radius > disk_radius:
             self._current_code = 0
@@ -66,7 +72,7 @@ class GalfitEnv:
     def _split(self, target_index):
         min_redius = 1000000
         min_redius_comp = None
-        for c in self._task.component[1:]:
+        for c in self._task.components[1:]:
             if c.effective_radius < min_redius:
                 min_redius = c.effective_radius
                 min_redius_comp = c
@@ -87,13 +93,13 @@ class GalfitEnv:
         if action == 4:
             return self.current_state, self.reward, True
         elif action == 0:
-            self._task.component[0].__background__.trainable ^= 1
+            self._task.components[0].__background__.trainable ^= 1
         elif action == 1:
             self._split(1)
         elif action == 2:
             self._split(0.5)
         elif action == 3:
-            for c in self._task.component[1:]:
+            for c in self._task.components[1:]:
                 if not c.__sersic_index__.trainable and c.sersic_index == 4:
                     c.set_sersic_index(trainable=True)
         self._update_state()
@@ -112,12 +118,14 @@ class GalfitEnv:
 
     @property
     def current_state(self):
-        output_file = self._task.config.__output__.value
+        output_file = self._task.config._output.value
         with fits.open(output_file) as hdus:
-            residual = hdus[3].data
-            model = hdus[2].data
+            print(len(hdus))
+            residual = np.array(hdus[3].data)
+            model = np.array(hdus[2].data)
         image = np.array([residual, model])
-        image = transforms.Resize(self._image_size)(image)
+        # print(image.shape)
+        # image = transforms.Resize(self._image_size)(Image.fromarray(image))
         return np.array([self._current_code, self._sky_state]), image
 
     @property
