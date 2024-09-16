@@ -35,10 +35,9 @@ class GalfitEnv:
         self._image_size = image_size
 
     def _update_state(self):
-        # self._task.run()
+        self._task.run()
         self._chi2 = self._task.read_component('./galfit.01')
-        # shutil.rmtree('./galfit.01')
-        # os.remove('./galfit.01')
+        os.remove('./galfit.01')
         self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
         self._current_code = 0
         bulge_radius = 0
@@ -61,7 +60,7 @@ class GalfitEnv:
             if self._current_code & add_code:
                 self._current_code = 0
                 break
-            if c.magnitude > self._mag_limit: # 限定mag_limit 为 mag_baseline + mag_maxgap, 其中 mag_baseline 为初始 sersic 的 magnitude
+            if c.magnitude > self._mag_limit:  # 限定mag_limit 为 mag_baseline + mag_maxgap, 其中 mag_baseline 为初始 sersic 的 magnitude
                 self._current_code = 0
                 break
             if c.effective_radius < 2 or c.effective_radius > max(self._task.config.image_size) / 2:

@@ -1,5 +1,6 @@
 from simple_env import GalfitEnv
-from galfit_alpha import GalfitAlpha, DeepQLearning
+from galfit_alpha import GalfitAlpha
+from DQL import DeepQLearning
 import platform
 import matplotlib.pyplot as plt
 import torch
