@@ -1,12 +1,13 @@
 import matplotlib.pyplot as plt
 from torch import nn, from_numpy
+from copy import deepcopy
 import numpy as np
 
 
 class DeepQLearning:
     def __init__(self, Q_net: nn.Module, learning_rate, reward_decay, e_greedy, memory_size, batch_size) -> None:
         self.eval_net = Q_net
-        self.target_net = Q_net.detach().clone()
+        self.target_net = deepcopy(Q_net)
         self.action_dim = Q_net.n_action
         self.state_dim = Q_net.state_num
         self.lr = learning_rate
@@ -50,7 +51,7 @@ class DeepQLearning:
         loss = self.eval_net.fit(
             batch_memory[:, :self.state_dim], image_batch_memory[:, 0, :, :, :], q_target, self.lr)
         self.loss_history.extend(loss)
-        self.target_net = self.eval_net.detach().clone()
+        self.target_net = deepcopy(self.eval_net)
 
     def choose_action(self, s):
         if np.random.uniform() < self.epsilon:
