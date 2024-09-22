@@ -2,8 +2,8 @@ from components import *
 from astropy.io import fits
 import subprocess
 import os
-# from photutils.detection import DAOStarFinder
-from photutils.detection import IRAFStarFinder
+from photutils.segmentation import SourceFinder, SourceCatalog
+from photutils.background import Background2D, MedianBackground
 
 
 def _read_header(hdu, key):
