@@ -2,7 +2,6 @@ from simple_env import GalfitEnv
 from galfit_alpha import GalfitAlpha
 from DQL import DeepQLearning
 import platform
-import matplotlib.pyplot as plt
 import torch
 
 os_name = platform.system()
@@ -16,7 +15,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Training on {device}")
 
 if __name__ == '__main__':
-    Q_net = GalfitAlpha(2, 2, 2042, 5, device)
+    Q_net = GalfitAlpha(GalfitEnv.state_num, GalfitEnv.channel_num,
+                        GalfitEnv.image_size, GalfitEnv.action_num, device)
     DQL = DeepQLearning(Q_net, 0.01, 0.9, 0.9, 1000, 32)
     step = 0
     for i in range(1000):

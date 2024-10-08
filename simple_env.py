@@ -1,11 +1,11 @@
 import numpy as np
 from task import GalfitTask, Config
 from components import *
-import shutil
 from copy import deepcopy
 from astropy.io import fits
 from torchvision import transforms
-from PIL import Image
+from torch import from_numpy
+import matplotlib.pyplot as plt
 import os
 
 # code_state = ['bulge', 'disk', 'bar', 'bulge&disk',
@@ -24,20 +24,24 @@ class GalfitEnv:
     chi2_weight = 20
     error_punish = 1
     mag_maxgap = 5
+    channel_num = 2
+    state_num = 2
+    action_num = 5
+    image_size = 1000
 
-    def __init__(self, input_file, image_size=2000) -> None:
+    def __init__(self, input_file) -> None:
         config = Config(input_file)
         self._task = GalfitTask(config)
-        self._task.init_guess()
-        self._mag_limit = self._task._mag_baseline + self.mag_maxgap
+        # self._task.init_guess()
+        # self._mag_limit = self._task._mag_baseline + self.mag_maxgap
+        self._mag_limit = 20
         self._update_state()
         self._base_chi2 = self._chi2
-        self._image_size = image_size
 
     def _update_state(self):
-        self._task.run()
+        # self._task.run()
         self._chi2 = self._task.read_component('./galfit.01')
-        os.remove('./galfit.01')
+        # os.remove('./galfit.01')
         self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
         self._current_code = 0
         bulge_radius = 0
@@ -124,23 +128,10 @@ class GalfitEnv:
             print(len(hdus), output_file)
             residual = np.array(hdus[3].data)
             model = np.array(hdus[2].data)
-        image = np.array([residual, model], dtype=np.float64)
-        # print(image.shape)
-        # image = transforms.Resize(self._image_size)(Image.fromarray(image))
+        image = from_numpy(np.array([residual, model], dtype=np.float64))
+        # plt.imshow(np.log(np.abs(image.numpy()[0])))
+        # plt.show()
+        image = transforms.Resize(self.image_size)(image).numpy()
+        # plt.imshow(np.log(np.abs(image[0])))
+        # plt.show()
         return np.array([self._current_code, self._sky_state], dtype=np.float64), image
-
-    @property
-    def channel_num(self):
-        return 2
-
-    @property
-    def state_num(self):
-        return 2
-
-    @property
-    def action_num(self):
-        return 5
-
-    @property
-    def image_size(self):
-        return self._image_size
