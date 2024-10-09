@@ -129,9 +129,9 @@ class GalfitEnv:
             residual = np.array(hdus[3].data)
             model = np.array(hdus[2].data)
         image = from_numpy(np.array([residual, model], dtype=np.float64))
-        plt.imshow(np.log(np.abs(image.numpy()[0])))
-        plt.show()
+        # plt.imshow(np.log(np.abs(image.numpy()[0])))
+        # plt.show()
         image = transforms.Resize(self.image_size)(image).numpy()
-        plt.imshow(np.log(np.abs(image[0])))
-        plt.show()
+        # plt.imshow(np.log(np.abs(image[0])))
+        # plt.show()
         return np.array([self._current_code, self._sky_state], dtype=np.float64), image

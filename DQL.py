@@ -8,8 +8,6 @@ class DeepQLearning:
     def __init__(self, Q_net: nn.Module, learning_rate, reward_decay, e_greedy, memory_size, batch_size) -> None:
         self.eval_net = Q_net
         self.target_net = deepcopy(Q_net)
-        self.action_dim = Q_net.n_action
-        self.state_dim = Q_net.state_num
         self.lr = learning_rate
         self.gamma = reward_decay
         self.epsilon = e_greedy
@@ -36,30 +34,53 @@ class DeepQLearning:
         else:
             sample_index = np.random.choice(
                 self.memory_counter, size=self.batch_size)
-        batch_memory = self.memory[sample_index, :]
-        image_batch_memory = self.image_memory[sample_index, :, :, :, :]
-        q_next = self.target_net(
-            batch_memory[:, -self.state_dim:], image_batch_memory[:, 1, :, :, :])
-        q_eval = self.eval_net(
-            batch_memory[:, :self.state_dim], image_batch_memory[:, 0, :, :, :])
+
+        batch_state = from_numpy(
+            self.memory[sample_index, :self.state_dim]).to(self.eval_net.device)
+        batch_state_ = from_numpy(
+            self.memory[sample_index, -self.state_dim:]).to(self.eval_net.device)
+        batch_action = self.memory[sample_index, self.state_dim].astype(int)
+        batch_reward = from_numpy(
+            self.memory[sample_index, self.state_dim+1]).to(self.eval_net.device)
+        batch_image = from_numpy(
+            self.image_memory[sample_index, 0, :, :, :]).to(self.eval_net.device)
+        batch_image_ = from_numpy(
+            self.image_memory[sample_index, 1, :, :, :]).to(self.eval_net.device)
+
+        q_next = self.target_net(batch_state_, batch_image_)
+        q_eval = self.eval_net(batch_state, batch_image)
         q_target = q_eval.detach().clone()
-        eval_act_index = batch_memory[:, self.state_dim].astype(int)
-        reward = from_numpy(
-            batch_memory[:, self.state_dim+1]).to(self.eval_net.device)
-        q_target[:, eval_act_index] = reward + \
+        q_target[:, batch_action] = batch_reward + \
             self.gamma * q_next.detach().max(dim=1)[0]
-        loss = self.eval_net.fit(
-            batch_memory[:, :self.state_dim], image_batch_memory[:, 0, :, :, :], q_target, self.lr)
+        loss = self.eval_net.fit(batch_state, batch_image, q_target, self.lr)
         self.loss_history.extend(loss)
         self.target_net = deepcopy(self.eval_net)
+
+        # batch_memory = self.memory[sample_index, :]
+        # image_batch_memory = self.image_memory[sample_index, :, :, :, :]
+        # q_next = self.target_net(
+        #     batch_memory[:, -self.state_dim:], image_batch_memory[:, 1, :, :, :])
+        # q_eval = self.eval_net(
+        #     batch_memory[:, :self.state_dim], image_batch_memory[:, 0, :, :, :])
+        # q_target = q_eval.detach().clone()
+        # eval_act_index = batch_memory[:, self.state_dim].astype(int)
+        # reward = from_numpy(
+        #     batch_memory[:, self.state_dim+1]).to(self.eval_net.device)
+        # q_target[:, eval_act_index] = reward + \
+        #     self.gamma * q_next.detach().max(dim=1)[0]
+        # loss = self.eval_net.fit(
+        #     batch_memory[:, :self.state_dim], image_batch_memory[:, 0, :, :, :], q_target, self.lr)
+        # self.loss_history.extend(loss)
+        # self.target_net = deepcopy(self.eval_net)
 
     def choose_action(self, s):
         if np.random.uniform() < self.epsilon:
             action = np.random.choice(self.action_dim)
         else:
-            state_code = np.expand_dims(s[0], 0)
-            figs = np.expand_dims(s[1], 0)
-            action = self.eval_net(state_code, figs)
+            state_code = from_numpy(np.expand_dims(
+                s[0], 0)).to(self.eval_net.device)
+            figs = from_numpy(np.expand_dims(s[1], 0)).to(self.eval_net.device)
+            action = self.eval_net(state_code, figs).numpy()
             action = np.argmax(action)
         return action
 

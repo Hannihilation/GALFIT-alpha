@@ -3,6 +3,7 @@ from galfit_alpha import GalfitAlpha
 from DQL import DeepQLearning
 import platform
 import torch
+# from torchsummary import summary
 
 os_name = platform.system()
 if os_name == 'Darwin':
@@ -17,10 +18,12 @@ print(f"Training on {device}")
 if __name__ == '__main__':
     Q_net = GalfitAlpha(GalfitEnv.state_num, GalfitEnv.channel_num,
                         GalfitEnv.image_size, GalfitEnv.action_num, device)
+    # summary(Q_net.float(), [(GalfitEnv.state_num,), (GalfitEnv.channel_num,
+    #         GalfitEnv.image_size, GalfitEnv.image_size)], device='cpu')
     DQL = DeepQLearning(Q_net, 0.01, 0.9, 0.9, 1000, 32)
     step = 0
     for i in range(1000):
-        galaxy = CGS_file[i % len(CGS_file)]
+        galaxy = CGS_file[0]  # [i % len(CGS_file)]
         env = GalfitEnv(pre_path+galaxy+'/'+galaxy+'_R_reg.fits')
         s = env.current_state
         while True:
