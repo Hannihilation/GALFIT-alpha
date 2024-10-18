@@ -152,7 +152,7 @@ class GalfitTask:
             bkg_estimator = MedianBackground()
             bkg = Background2D(data, (50, 50), filter_size=(3, 3), bkg_estimator=bkg_estimator)
             print('Header background: ', sky.background, '\nEstimated background: ', bkg.background)
-            threshold = 100 * bkg.background_rms
+            threshold = 50 * bkg.background_rms
 
             ### 下面这段convolution是否必要？###
             from astropy.convolution import convolve
@@ -170,7 +170,10 @@ class GalfitTask:
             # Using photutils.segmentation.SourceFinder to find initial stats
             finder = SourceFinder(npixels=10, progress_bar=False)
             segment_map = finder(convolved_data, threshold)
-            print(segment_map)
+            # print(segment_map)
+            if(segment_map == None):
+                print("Source finding failure. Try reduce threshold.\n")
+                return
 
             cat = SourceCatalog(data, segment_map, convolved_data=convolved_data)
             print(cat)
