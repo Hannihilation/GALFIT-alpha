@@ -32,16 +32,15 @@ class GalfitEnv:
     def __init__(self, input_file) -> None:
         config = Config(input_file)
         self._task = GalfitTask(config)
-        # self._task.init_guess()
-        # self._mag_limit = self._task._mag_baseline + self.mag_maxgap
-        self._mag_limit = 20
+        self._task.init_guess()
+        self._mag_limit = self._task._mag_baseline + self.mag_maxgap
         self._update_state()
         self._base_chi2 = self._chi2
 
     def _update_state(self):
-        # self._task.run()
+        self._task.run()
         self._chi2 = self._task.read_component('./galfit.01')
-        # os.remove('./galfit.01')
+        os.remove('./galfit.01')
         self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
         self._current_code = 0
         bulge_radius = 0

@@ -88,4 +88,4 @@ class DeepQLearning:
         plt.plot(self.loss_history)
         plt.xlabel('Iteration')
         plt.ylabel('Loss')
-        plt.show()
+        plt.savefig('./loss.png')
