@@ -81,7 +81,7 @@ class DeepQLearning:
             state_code = from_numpy(np.expand_dims(
                 s[0], 0)).to(self.eval_net.device)
             figs = from_numpy(np.expand_dims(s[1], 0)).to(self.eval_net.device)
-            action = self.eval_net(state_code, figs).numpy()
+            action = self.eval_net(state_code, figs).cpu().numpy()
             action = np.argmax(action)
         return action
 
