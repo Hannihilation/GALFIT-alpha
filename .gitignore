@@ -5,3 +5,4 @@ galfit
 .DS_Store
 fig/
 fit.log
+__pycache__/
