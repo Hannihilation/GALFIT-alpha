@@ -13,7 +13,7 @@ class DeepQLearning:
         self.epsilon = e_greedy
         self.memory_size = memory_size
         self.batch_size = batch_size
-        self.memory = np.zeros((memory_size, self.state_dim * 2 + 2))
+        self.memory = np.zeros((memory_size, Q_net.state_num * 2 + 2))
         self.image_memory = np.zeros((memory_size, 2, Q_net.fig_channel_num,
                                      Q_net.fig_size, Q_net.fig_size))
         self.memory_counter = 0
