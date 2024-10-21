@@ -144,21 +144,24 @@ class GalfitTask:
 
     def init_guess(self):
         with fits.open(self._config._input.value) as file:
+            print(self._config._input.value)
             sky = Sky()
             sky.background = _read_header(file[0], 'SKY')
             data = file[0].data
             self.add_component(sky)
             sersic = Sersic()
             bkg_estimator = MedianBackground()
-            bkg = Background2D(data, (50, 50), filter_size=(3, 3), bkg_estimator=bkg_estimator)
-            print('Header background: ', sky.background, '\nEstimated background: ', bkg.background)
+            bkg = Background2D(data, (50, 50), filter_size=(
+                3, 3), bkg_estimator=bkg_estimator)
+            print('Header background: ', sky.background,
+                  '\nEstimated background: ', bkg.background)
             threshold = 50 * bkg.background_rms
 
             ### 下面这段convolution是否必要？###
             from astropy.convolution import convolve
             from photutils.segmentation import make_2dgaussian_kernel
             kernel = make_2dgaussian_kernel(3.0, size=5)  # FWHM = 3.0
-            
+
             with fits.open(self.config._mask.value) as mask:
                 mask_data = mask[0].data
             data = data * (1 - mask_data)
@@ -166,16 +169,16 @@ class GalfitTask:
             convolved_data = convolve(data, kernel)
             ### ### ### ### ### ### ### ### ###
 
-
             # Using photutils.segmentation.SourceFinder to find initial stats
             finder = SourceFinder(npixels=10, progress_bar=False)
             segment_map = finder(convolved_data, threshold)
             # print(segment_map)
-            if(segment_map == None):
+            if (segment_map == None):
                 print("Source finding failure. Try reduce threshold.\n")
                 return
 
-            cat = SourceCatalog(data, segment_map, convolved_data=convolved_data)
+            cat = SourceCatalog(data, segment_map,
+                                convolved_data=convolved_data)
             print(cat)
 
             tbl = cat.to_table()
@@ -185,16 +188,21 @@ class GalfitTask:
             print(tbl)
 
             sersic.position = (round(_read_header(file[0], 'CEN_X')),
-                                round(_read_header(file[0], 'CEN_Y')))
-            map_label = segment_map.data[sersic.position[1],sersic.position[0]] # Seems like it is transposed
-            
-            total_flux = tbl['kron_flux'][map_label - 1] # Which one to use? kron or segment?
-            sersic.magnitude = -2.5 * np.log10(total_flux) + self.config._zeropoint.value
-            self._mag_baseline = sersic.magnitude # Save the initial magnitude
+                               round(_read_header(file[0], 'CEN_Y')))
+            # Seems like it is transposed
+            map_label = segment_map.data[sersic.position[1],
+                                         sersic.position[0]]
+
+            # Which one to use? kron or segment?
+            total_flux = tbl['kron_flux'][map_label - 1]
+            sersic.magnitude = -2.5 * \
+                np.log10(total_flux) + self.config._zeropoint.value
+            self._mag_baseline = sersic.magnitude  # Save the initial magnitude
             # ind = np.argmax(tbl['segment_flux'])
-            
-            sersic.effective_radius = round(np.sqrt(tbl['area'][map_label - 1].value))
-            
+
+            sersic.effective_radius = round(
+                np.sqrt(tbl['area'][map_label - 1].value))
+
             sersic.axis_ratio = 1-float(_read_header(file[0], 'ELL_E'))
             sersic.position_angle = float(_read_header(file[0], 'ELL_PA'))
             self.add_component(sersic)
