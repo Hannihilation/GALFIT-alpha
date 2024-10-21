@@ -36,12 +36,13 @@ class DeepQLearning:
                 self.memory_counter, size=self.batch_size)
 
         batch_state = from_numpy(
-            self.memory[sample_index, :self.state_dim]).to(self.eval_net.device)
+            self.memory[sample_index, :self.eval_net.state_num]).to(self.eval_net.device)
         batch_state_ = from_numpy(
-            self.memory[sample_index, -self.state_dim:]).to(self.eval_net.device)
-        batch_action = self.memory[sample_index, self.state_dim].astype(int)
+            self.memory[sample_index, -self.eval_net.state_num:]).to(self.eval_net.device)
+        batch_action = self.memory[sample_index,
+                                   self.eval_net.state_num].astype(int)
         batch_reward = from_numpy(
-            self.memory[sample_index, self.state_dim+1]).to(self.eval_net.device)
+            self.memory[sample_index, self.eval_net.state_num+1]).to(self.eval_net.device)
         batch_image = from_numpy(
             self.image_memory[sample_index, 0, :, :, :]).to(self.eval_net.device)
         batch_image_ = from_numpy(
@@ -75,7 +76,7 @@ class DeepQLearning:
 
     def choose_action(self, s):
         if np.random.uniform() < self.epsilon:
-            action = np.random.choice(self.action_dim)
+            action = np.random.choice(self.eval_net.n_action)
         else:
             state_code = from_numpy(np.expand_dims(
                 s[0], 0)).to(self.eval_net.device)
