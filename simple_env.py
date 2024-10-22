@@ -36,6 +36,7 @@ class GalfitEnv:
         if os.path.exists(init_file):
             _chi2,  self._mag_limit, self._base_chi2 = self._task.read_component(init_file)
             # self._base_chi2 = self._chi2
+            self._chi2 = self._base_chi2
             self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
             self._current_code = 0
             bulge_radius = 0

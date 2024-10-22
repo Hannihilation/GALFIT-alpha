@@ -133,7 +133,7 @@ class GalfitTask:
                 if len(line) > 0 and pos > 0:
                     if line[0] == '0':
                         line = line.split(' ')
-                        component = component_names[line[1]]()
+                        component = component_names[line[1].split('\n')[0]]()
                         file = component.read(file)
                         self._components.append(component)
                 line = file.readline()
@@ -188,6 +188,8 @@ class GalfitTask:
                 3, 3), bkg_estimator=bkg_estimator)
             # print('Header background: ', sky.background,
             #       '\nEstimated background: ', bkg.background)
+            sky.background = np.mean(bkg.background)
+            print('Estimated background: ', sky.background)
             threshold = 50 * bkg.background_rms
 
             ### 下面这段convolution是否必要？###
