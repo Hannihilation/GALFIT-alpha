@@ -33,11 +33,12 @@ class GalfitEnv:
     def __init__(self, input_file) -> None:
         config = Config(input_file)
         self._task = GalfitTask(config)
-        init_file = input_file.replace('.fits','.init')
-        output_file = input_file.replace('.fits','_out.fits')
-        init_output = input_file.replace('.fits','_out.save')
+        init_file = input_file.replace('.fits', '.init')
+        output_file = input_file.replace('.fits', '_out.fits')
+        init_output = input_file.replace('.fits', '_out.save')
         if os.path.exists(init_file):
-            _chi2,  self._mag_limit, self._base_chi2 = self._task.read_component(init_file)
+            _chi2,  self._mag_limit, self._base_chi2 = self._task.read_component(
+                init_file)
             # self._base_chi2 = self._chi2
             self._chi2 = self._base_chi2
             if os.path.exists(output_file):
@@ -80,8 +81,8 @@ class GalfitEnv:
             self._mag_limit = self._task._mag_baseline + self.mag_maxgap
             self._update_state()
             self._base_chi2 = self._chi2
-            output_file = input_file.replace('.fits','_out.fits')
-            init_output = input_file.replace('.fits','_out.save')
+            output_file = input_file.replace('.fits', '_out.fits')
+            init_output = input_file.replace('.fits', '_out.save')
             if os.path.exists(init_output):
                 os.remove(init_output)
             shutil.copy2(output_file, init_output)
@@ -89,11 +90,12 @@ class GalfitEnv:
             with open(init_file, 'w') as file:
                 print(self._task, file=file)
                 print('\n# Mag_limit = '+str(self._mag_limit), file=file)
-                print('\n# Base_chi2 = ' + str(self._base_chi2), file = file)
+                print('\n# Base_chi2 = ' + str(self._base_chi2), file=file)
 
     def _update_state(self):
         self._task.run()
-        self._chi2, _Mag_limit, _Base_chi2 = self._task.read_component('./galfit.01')
+        self._chi2, _Mag_limit, _Base_chi2 = self._task.read_component(
+            './galfit.01')
         os.remove('./galfit.01')
         self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
         self._current_code = 0
@@ -178,7 +180,6 @@ class GalfitEnv:
     def current_state(self):
         output_file = self._task.config._output.value
         with fits.open(output_file) as hdus:
-            print(len(hdus), output_file)
             residual = np.array(hdus[3].data)
             model = np.array(hdus[2].data)
         image = from_numpy(np.array([residual, model], dtype=np.float64))

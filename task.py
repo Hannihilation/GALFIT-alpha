@@ -177,7 +177,6 @@ class GalfitTask:
 
     def init_guess(self):
         with fits.open(self._config._input.value) as file:
-            print(self._config._input.value)
             sky = Sky()
             # sky.background = _read_header(file[0], 'SKY')
             data = file[0].data
