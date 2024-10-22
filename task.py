@@ -179,15 +179,15 @@ class GalfitTask:
         with fits.open(self._config._input.value) as file:
             print(self._config._input.value)
             sky = Sky()
-            sky.background = _read_header(file[0], 'SKY')
+            # sky.background = _read_header(file[0], 'SKY')
             data = file[0].data
-            self.add_component(sky)
+            # self.add_component(sky)
             sersic = Sersic()
             bkg_estimator = MedianBackground()
             bkg = Background2D(data, (50, 50), filter_size=(
                 3, 3), bkg_estimator=bkg_estimator)
-            print('Header background: ', sky.background,
-                  '\nEstimated background: ', bkg.background)
+            # print('Header background: ', sky.background,
+            #       '\nEstimated background: ', bkg.background)
             threshold = 50 * bkg.background_rms
 
             ### 下面这段convolution是否必要？###
