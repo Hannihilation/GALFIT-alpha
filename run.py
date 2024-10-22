@@ -8,6 +8,7 @@ import torch
 
 os_name = platform.system()
 if os_name == 'Darwin':
+    train_size = 2
     train_file = ('IC5240', 'NGC1326')
     test_file = ('IC5240', 'NGC1326')
 elif os_name == 'Linux':
@@ -15,7 +16,7 @@ elif os_name == 'Linux':
                 'NGC2784', 'NGC6118',   'NGC945')
     train_size = 2
     # train_file = random.choice(CGS_file, train_size, replace=False)
-    train_file =  ('NGC1326','IC5240')
+    train_file = ('NGC1326', 'IC5240')
     # test_file = (x for x in CGS_file if x not in train_file)
 pre_path = './CGS/'
 
