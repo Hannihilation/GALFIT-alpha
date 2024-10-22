@@ -139,6 +139,29 @@ class GalfitTask:
                 line = file.readline()
         return chi2, Mag_limit, Base_chi2
 
+    def _galfit_output(self, str):
+        state = 0
+        for line in str.stdout.split('\n'):
+            if state == 1:
+                if line.startswith('======'):
+                    state = 0
+                else:
+                    print(line)
+            elif state == 2:
+                if line.statwith('COUNTDOWN'):
+                    state = 0
+                else:
+                    tmp += line + '\n'
+            elif line.startswith('#  Input menu file:'):
+                print(line)
+            elif line.startswith('Initial parameters:'):
+                print(line)
+                state = 1
+            elif line.startswith('Iteration :'):
+                tmp = line + '\n'
+                state = 2
+        print(tmp+'\n')
+
     def run(self, galfit_file=None, galfit_mode=0):
         if galfit_file is None:
             galfit_file = self._config._output.value.replace(
@@ -146,7 +169,11 @@ class GalfitTask:
         self.config.galfit_mode = galfit_mode
         with open(galfit_file, 'w') as file:
             print(self, file=file)
-        subprocess.run(['./galfit', galfit_file], check=True)
+        result = subprocess.run(
+            ['./galfit', galfit_file], check=True, capture_output=True, text=True)
+        self._galfit_output(result.stdout)
+        print(result.stderr)
+        result.check_returncode()
 
     def init_guess(self):
         with fits.open(self._config._input.value) as file:

@@ -56,6 +56,7 @@ class GalfitAlpha(nn.Module):
         loss_his = []
         loss = nn.MSELoss()
         optimizer = optim.Adam(self.parameters(), lr=lr)
+        print('start training ...')
         for i in range(1000):
             output = self(state_code, figs)
             l = loss(output, y)
@@ -63,4 +64,6 @@ class GalfitAlpha(nn.Module):
             optimizer.zero_grad()
             l.backward()
             optimizer.step()
+            if i % 100 == 0:
+                print(f'loss: {l}')
         return loss_his
