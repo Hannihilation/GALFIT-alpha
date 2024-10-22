@@ -7,6 +7,7 @@ from torchvision import transforms
 from torch import from_numpy
 import matplotlib.pyplot as plt
 import os
+import shutil
 
 # code_state = ['bulge', 'disk', 'bar', 'bulge&disk',
 #               'disk&bar', 'bulge&bar', 'bulge&disk&bar', 'error']
@@ -33,10 +34,16 @@ class GalfitEnv:
         config = Config(input_file)
         self._task = GalfitTask(config)
         init_file = input_file.replace('.fits','.init')
+        output_file = input_file.replace('.fits','_out.fits')
+        init_output = input_file.replace('.fits','_out.save')
         if os.path.exists(init_file):
             _chi2,  self._mag_limit, self._base_chi2 = self._task.read_component(init_file)
             # self._base_chi2 = self._chi2
             self._chi2 = self._base_chi2
+            if os.path.exists(output_file):
+                os.remove(output_file)
+            shutil.copy2(init_output, output_file)
+
             self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
             self._current_code = 0
             bulge_radius = 0
@@ -73,6 +80,11 @@ class GalfitEnv:
             self._mag_limit = self._task._mag_baseline + self.mag_maxgap
             self._update_state()
             self._base_chi2 = self._chi2
+            output_file = input_file.replace('.fits','_out.fits')
+            init_output = input_file.replace('.fits','_out.save')
+            if os.path.exists(init_output):
+                os.remove(init_output)
+            shutil.copy2(output_file, init_output)
 
             with open(init_file, 'w') as file:
                 print(self._task, file=file)
