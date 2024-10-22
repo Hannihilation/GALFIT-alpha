@@ -148,7 +148,7 @@ class GalfitTask:
                 else:
                     print(line)
             elif state == 2:
-                if line.startwith('COUNTDOWN'):
+                if line.startswith('COUNTDOWN'):
                     state = 0
                 else:
                     tmp += line + '\n'
