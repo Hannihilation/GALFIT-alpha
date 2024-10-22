@@ -190,6 +190,7 @@ class GalfitTask:
             #       '\nEstimated background: ', bkg.background)
             sky.background = np.mean(bkg.background)
             print('Estimated background: ', sky.background)
+            self.add_component(sky)
             threshold = 50 * bkg.background_rms
 
             ### 下面这段convolution是否必要？###
