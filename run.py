@@ -12,10 +12,11 @@ if os_name == 'Darwin':
     test_file = ('IC5240', 'NGC1326')
 elif os_name == 'Linux':
     CGS_file = ('IC5240', 'NGC1326', 'NGC1357', 'NGC1411', 'NGC1533', 'NGC1600',
-                'NGC2784', 'NGC4786', 'NGC6118', 'NGC7083', 'NGC7329', 'NGC945')
-    train_size = 10
-    train_file = random.choice(CGS_file, train_size, replace=False)
-    test_file = (x for x in CGS_file if x not in train_file)
+                'NGC2784', 'NGC6118',   'NGC945')
+    train_size = 2
+    # train_file = random.choice(CGS_file, train_size, replace=False)
+    train_file =  ('NGC1326','IC5240')
+    # test_file = (x for x in CGS_file if x not in train_file)
 pre_path = './CGS/'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -28,7 +29,7 @@ if __name__ == '__main__':
     #         GalfitEnv.image_size, GalfitEnv.image_size)], device='cpu')
     DQL = DeepQLearning(Q_net, 0.01, 0.9, 0.9, 1000, 32)
     step = 0
-    for i in range(1000):
+    for i in range(100):
         galaxy = train_file[i % train_size]
         env = GalfitEnv(pre_path+galaxy+'/'+galaxy+'_R_reg.fits')
         s = env.current_state
