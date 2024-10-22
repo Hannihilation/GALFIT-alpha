@@ -116,6 +116,8 @@ class GalfitTask:
 
     def read_component(self, file_name):
         chi2 = -1
+        Mag_limit = -1
+        Base_chi2 = -1
         self._components = []
         with open(file_name, 'r') as file:
             line = file.readline()
@@ -123,6 +125,10 @@ class GalfitTask:
                 line = line.lstrip()
                 if chi2 < 0 and line.startswith('#  Chi^2/nu = '):
                     chi2 = float(line.split('=')[1].split(',')[0])
+                if Mag_limit < 0 and line.startswith('#  Mag_limit = '):
+                    Mag_limit = float(line.split('=')[1])
+                if Base_chi2 < 0 and line.startswith('#  Base_chi2 = '):
+                    Base_chi2 = float(line.split('=')[1])
                 pos = line.find(')')
                 if len(line) > 0 and pos > 0:
                     if line[0] == '0':
@@ -131,7 +137,7 @@ class GalfitTask:
                         file = component.read(file)
                         self._components.append(component)
                 line = file.readline()
-        return chi2
+        return chi2, Mag_limit, Base_chi2
 
     def run(self, galfit_file=None, galfit_mode=0):
         if galfit_file is None:

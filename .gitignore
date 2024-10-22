@@ -6,3 +6,4 @@ galfit
 fig/
 fit.log
 __pycache__/
+*.log

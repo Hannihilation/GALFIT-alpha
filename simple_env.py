@@ -32,14 +32,55 @@ class GalfitEnv:
     def __init__(self, input_file) -> None:
         config = Config(input_file)
         self._task = GalfitTask(config)
-        self._task.init_guess()
-        self._mag_limit = self._task._mag_baseline + self.mag_maxgap
-        self._update_state()
-        self._base_chi2 = self._chi2
+        init_file = input_file.replace('.fits','.init')
+        if os.path.exists(init_file):
+            _chi2,  self._mag_limit, self._base_chi2 = self._task.read_component(init_file)
+            # self._base_chi2 = self._chi2
+            self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
+            self._current_code = 0
+            bulge_radius = 0
+            disk_radius = 10000
+            for c in self._task.components[1:]:
+                if c.__sersic_index__.trainable:
+                    if c.sersic_index > 7 or c.sersic_index < 2.5:
+                        self._current_code = 0
+                        break
+                    add_code = 1
+                    bulge_radius = c.effective_radius
+                elif c.sersic_index == 4:
+                    add_code = 1
+                    bulge_radius = c.effective_radius
+                elif c.sersic_index == 1:
+                    add_code = 2
+                    disk_radius = c.effective_radius
+                elif c.sersic_index == 0.5:
+                    add_code = 4
+                if self._current_code & add_code:
+                    self._current_code = 0
+                    break
+                if c.magnitude > self._mag_limit:  # 限定mag_limit 为 mag_baseline + mag_maxgap, 其中 mag_baseline 为初始 sersic 的 magnitude
+                    self._current_code = 0
+                    break
+                if c.effective_radius < 2 or c.effective_radius > max(self._task.config.image_size) / 2:
+                    self._current_code = 0
+                    break
+                self._current_code += add_code
+            if bulge_radius > disk_radius:
+                self._current_code = 0
+        else:
+            self._task.init_guess()
+            self._mag_limit = self._task._mag_baseline + self.mag_maxgap
+            self._update_state()
+            self._base_chi2 = self._chi2
+
+            with open(init_file, 'w') as file:
+                print(self._task, file=file)
+                print('\n# Mag_limit = '+str(self._mag_limit), file=file)
+                print('\n# Base_chi2 = ' + str(self._base_chi2), file = file)
 
     def _update_state(self):
         self._task.run()
-        self._chi2 = self._task.read_component('./galfit.01')
+        self._chi2, _Mag_limit, _Base_chi2 = self._task.read_component('./galfit.01')
         os.remove('./galfit.01')
         self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
         self._current_code = 0
