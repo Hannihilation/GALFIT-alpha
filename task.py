@@ -141,7 +141,7 @@ class GalfitTask:
 
     def _galfit_output(self, str):
         state = 0
-        for line in str.stdout.split('\n'):
+        for line in str.split('\n'):
             if state == 1:
                 if line.startswith('======'):
                     state = 0
