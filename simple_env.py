@@ -153,6 +153,7 @@ class GalfitEnv:
         r = (1 - self._chi2 / self._base_chi2) * self.chi2_weight
         if self.current_code == 0:
             r -= self.error_punish
+        self._base_chi2 = self._chi2
         return r
 
     @property
