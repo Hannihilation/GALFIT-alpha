@@ -116,8 +116,6 @@ class GalfitTask:
 
     def read_component(self, file_name):
         chi2 = -1
-        Mag_limit = -1
-        Base_chi2 = -1
         self._components = []
         with open(file_name, 'r') as file:
             line = file.readline()
@@ -125,10 +123,6 @@ class GalfitTask:
                 line = line.lstrip()
                 if chi2 < 0 and line.startswith('#  Chi^2/nu = '):
                     chi2 = float(line.split('=')[1].split(',')[0])
-                if Mag_limit < 0 and line.startswith('#  Mag_limit = '):
-                    Mag_limit = float(line.split('=')[1])
-                if Base_chi2 < 0 and line.startswith('#  Base_chi2 = '):
-                    Base_chi2 = float(line.split('=')[1])
                 pos = line.find(')')
                 if len(line) > 0 and pos > 0:
                     if line[0] == '0':
@@ -137,7 +131,7 @@ class GalfitTask:
                         file = component.read(file)
                         self._components.append(component)
                 line = file.readline()
-        return chi2, Mag_limit, Base_chi2
+        return chi2
 
     def _galfit_output(self, str):
         state = 0
@@ -172,7 +166,8 @@ class GalfitTask:
         result = subprocess.run(
             ['./galfit', galfit_file], check=True, capture_output=True, text=True)
         self._galfit_output(result.stdout)
-        print(result.stderr)
+        if result.stderr:
+            print(result.stderr)
         result.check_returncode()
 
     def init_guess(self):
@@ -232,7 +227,6 @@ class GalfitTask:
             total_flux = tbl['kron_flux'][map_label - 1]
             sersic.magnitude = -2.5 * \
                 np.log10(total_flux) + self.config._zeropoint.value
-            self._mag_baseline = sersic.magnitude  # Save the initial magnitude
             # ind = np.argmax(tbl['segment_flux'])
 
             sersic.effective_radius = round(
