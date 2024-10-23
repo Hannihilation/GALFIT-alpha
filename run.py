@@ -36,8 +36,8 @@ if __name__ == '__main__':
         s = env.current_state
         while True:
             a = DQL.choose_action(s)
-            print(f'step: {step}, action: {a}')
             s_, r, done = env.step(a)
+            print(f'step: {step}, action: {a}, current state: {s_[0]}')
             DQL.store_transition(s, a, r, s_)
             if step > 0 and step % 10 == 0:
                 DQL.learn()

@@ -58,9 +58,9 @@ class GalfitEnv:
             shutil.copy2(output_file, init_output)
 
             with open(init_file, 'w') as file:
+                print('#  Mag_limit = '+str(self._mag_limit), file=file)
+                print('#  Base_chi2 = '+ str(self._base_chi2), file=file)
                 print(self._task, file=file)
-                print('\n# Mag_limit = '+str(self._mag_limit), file=file)
-                print('\n# Base_chi2 = ' + str(self._base_chi2), file=file)
 
     def _update_state(self):
         self._task.run()
@@ -134,6 +134,7 @@ class GalfitEnv:
                     break
                 if c.magnitude > self._mag_limit:  # 限定mag_limit 为 mag_baseline + mag_maxgap, 其中 mag_baseline 为初始 sersic 的 magnitude
                     self._current_code = 0
+                    print(c.magnitude, self._mag_limit, 'c')
                     break
                 if c.effective_radius < 2 or c.effective_radius > max(self._task.config.image_size) / 2:
                     self._current_code = 0
