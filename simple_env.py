@@ -139,7 +139,7 @@ class GalfitEnv:
         add_comp = deepcopy(min_redius_comp)
         min_redius_comp.magnitude += 0.75
         add_comp.magnitude += 0.75
-        min_redius_comp.set_sersic_index(4, True)
+        min_redius_comp.set_sersic_index(4, False)
         add_comp.set_sersic_index(target_index, False)
         add_comp.effective_radius *= 2
         self._task.add_component(add_comp)
@@ -160,7 +160,9 @@ class GalfitEnv:
             self._split(0.5)
         elif action == 3:
             for c in self._task.components[1:]:
-                if not c.__sersic_index__.trainable and c.sersic_index == 4:
+                if c.__sersic_index__.trainable:
+                    c.set_sersic_index(4, False)
+                elif c.sersic_index == 4:
                     c.set_sersic_index(trainable=True)
         self._update_state()
         return self.current_state, self.reward, self._current_code == 0

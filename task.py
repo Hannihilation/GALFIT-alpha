@@ -160,7 +160,7 @@ class GalfitTask:
             elif line.startswith('Iteration :'):
                 tmp = line + '\n'
                 state = 2
-        print(tmp+'\n')
+        print(tmp)
 
     def run(self, galfit_file=None, galfit_mode=0):
         if galfit_file is None:
