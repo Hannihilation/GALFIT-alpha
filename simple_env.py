@@ -44,38 +44,8 @@ class GalfitEnv:
             if os.path.exists(output_file):
                 os.remove(output_file)
             shutil.copy2(init_output, output_file)
-
             self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
-            self._current_code = 0
-            bulge_radius = 0
-            disk_radius = 10000
-            for c in self._task.components[1:]:
-                if c.__sersic_index__.trainable:
-                    if c.sersic_index > 7 or c.sersic_index < 2.5:
-                        self._current_code = 0
-                        break
-                    add_code = 1
-                    bulge_radius = c.effective_radius
-                elif c.sersic_index == 4:
-                    add_code = 1
-                    bulge_radius = c.effective_radius
-                elif c.sersic_index == 1:
-                    add_code = 2
-                    disk_radius = c.effective_radius
-                elif c.sersic_index == 0.5:
-                    add_code = 4
-                if self._current_code & add_code:
-                    self._current_code = 0
-                    break
-                if c.magnitude > self._mag_limit:  # 限定mag_limit 为 mag_baseline + mag_maxgap, 其中 mag_baseline 为初始 sersic 的 magnitude
-                    self._current_code = 0
-                    break
-                if c.effective_radius < 2 or c.effective_radius > max(self._task.config.image_size) / 2:
-                    self._current_code = 0
-                    break
-                self._current_code += add_code
-            if bulge_radius > disk_radius:
-                self._current_code = 0
+            self._current_code = -1
         else:
             self._task.init_guess()
             self._mag_limit = self._task._mag_baseline + self.mag_maxgap
@@ -98,36 +68,7 @@ class GalfitEnv:
             './galfit.01')
         os.remove('./galfit.01')
         self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
-        self._current_code = 0
-        bulge_radius = 0
-        disk_radius = 10000
-        for c in self._task.components[1:]:
-            if c.__sersic_index__.trainable:
-                if c.sersic_index > 7 or c.sersic_index < 2.5:
-                    self._current_code = 0
-                    break
-                add_code = 1
-                bulge_radius = c.effective_radius
-            elif c.sersic_index == 4:
-                add_code = 1
-                bulge_radius = c.effective_radius
-            elif c.sersic_index == 1:
-                add_code = 2
-                disk_radius = c.effective_radius
-            elif c.sersic_index == 0.5:
-                add_code = 4
-            if self._current_code & add_code:
-                self._current_code = 0
-                break
-            if c.magnitude > self._mag_limit:  # 限定mag_limit 为 mag_baseline + mag_maxgap, 其中 mag_baseline 为初始 sersic 的 magnitude
-                self._current_code = 0
-                break
-            if c.effective_radius < 2 or c.effective_radius > max(self._task.config.image_size) / 2:
-                self._current_code = 0
-                break
-            self._current_code += add_code
-        if bulge_radius > disk_radius:
-            self._current_code = 0
+        self._current_code = -1
 
     def _split(self, target_index):
         min_redius = 1000000
@@ -165,7 +106,42 @@ class GalfitEnv:
                 elif c.sersic_index == 4:
                     c.set_sersic_index(trainable=True)
         self._update_state()
-        return self.current_state, self.reward, self._current_code == 0
+        return self.current_state, self.reward, self.current_code == 0
+
+    @property
+    def current_code(self):
+        if self._current_code < 0:
+            self._current_code = 0
+            bulge_radius = 0
+            disk_radius = 10000
+            for c in self._task.components[1:]:
+                if c.__sersic_index__.trainable:
+                    if c.sersic_index > 7 or c.sersic_index < 2.5:
+                        self._current_code = 0
+                        break
+                    add_code = 1
+                    bulge_radius = c.effective_radius
+                elif c.sersic_index == 4:
+                    add_code = 1
+                    bulge_radius = c.effective_radius
+                elif c.sersic_index == 1:
+                    add_code = 2
+                    disk_radius = c.effective_radius
+                elif c.sersic_index == 0.5:
+                    add_code = 4
+                if self._current_code & add_code:
+                    self._current_code = 0
+                    break
+                if c.magnitude > self._mag_limit:  # 限定mag_limit 为 mag_baseline + mag_maxgap, 其中 mag_baseline 为初始 sersic 的 magnitude
+                    self._current_code = 0
+                    break
+                if c.effective_radius < 2 or c.effective_radius > max(self._task.config.image_size) / 2:
+                    self._current_code = 0
+                    break
+                self._current_code += add_code
+            if bulge_radius > disk_radius:
+                self._current_code = 0
+        return self._current_code
 
     @property
     def reward(self):
@@ -174,7 +150,7 @@ class GalfitEnv:
         #     return 1 / (1 + np.exp(-x))
         # out = sigmoid(10 * np.exp(-5 * self._chi2))
         r = (1 - self._chi2 / self._base_chi2) * self.chi2_weight
-        if self._current_code == 0:
+        if self.current_code == 0:
             r -= self.error_punish
         return r
 
@@ -190,4 +166,4 @@ class GalfitEnv:
         image = transforms.Resize(self.image_size)(image).numpy()
         # plt.imshow(np.log(np.abs(image[0])))
         # plt.show()
-        return np.array([self._current_code, self._sky_state], dtype=np.float64), image
+        return np.array([self.current_code, self._sky_state], dtype=np.float64), image
