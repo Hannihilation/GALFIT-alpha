@@ -186,7 +186,7 @@ class GalfitTask:
             sky.background = np.mean(bkg.background)
             print('Estimated background: ', sky.background)
             self.add_component(sky)
-            threshold = 50 * bkg.background_rms
+            threshold = 5 * bkg.background_rms
 
             ### 下面这段convolution是否必要？###
             from astropy.convolution import convolve
@@ -195,7 +195,7 @@ class GalfitTask:
 
             with fits.open(self.config._mask.value) as mask:
                 mask_data = mask[0].data
-            data = data * (1 - mask_data)
+            data = (data - bkg.background) * (1 - mask_data)
 
             convolved_data = convolve(data, kernel)
             ### ### ### ### ### ### ### ### ###
