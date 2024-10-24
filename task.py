@@ -157,14 +157,15 @@ class GalfitTask:
         print(tmp)
 
     def run(self, galfit_file=None, galfit_mode=0):
-        if galfit_file is None:
-            galfit_file = self._config._output.value.replace(
-                '.fits', '.galfit')
         self.config.galfit_mode = galfit_mode
-        with open(galfit_file, 'w') as file:
-            print(self, file=file)
-        result = subprocess.run(
-            ['./galfit', galfit_file], check=True, capture_output=True, text=True)
+        if galfit_file is not None:
+            with open(galfit_file, 'w') as file:
+                print(self, file=file)
+            result = subprocess.run(['./galfit', galfit_file],
+                                    capture_output=True, text=True)
+        else:
+            result = subprocess.run(['./galfit'], input=str(self),
+                                    capture_output=True, text=True)
         self._galfit_output(result.stdout)
         if result.stderr:
             print(result.stderr)
