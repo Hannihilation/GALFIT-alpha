@@ -6,11 +6,14 @@ from photutils.segmentation import SourceFinder, SourceCatalog
 from photutils.background import Background2D, MedianBackground
 
 
-def _read_header(hdu, key):
+def _read_header(hdu, key, default=None):
     if key in hdu.header:
         return hdu.header[key]
-    else:
+    elif '_'+key[1:] in hdu.header:
         return hdu.header['_'+key[1:]]
+    if default is None:
+        raise KeyError(f'Keyword {key} not found in header')
+    return default
 
 
 class Config:
@@ -41,8 +44,8 @@ class Config:
         zp = _read_header(input_file[0], 'ZPT_GSC')
         self._zeropoint = StrParam('J', zp)
         cd11 = _read_header(input_file[0], 'CD1_1')
-        cd12 = _read_header(input_file[0], 'CD1_2')
-        cd21 = _read_header(input_file[0], 'CD2_1')
+        cd12 = _read_header(input_file[0], 'CD1_2', default=0)
+        cd21 = _read_header(input_file[0], 'CD2_1', default=0)
         cd22 = _read_header(input_file[0], 'CD2_2')
         dx = np.sqrt(cd11**2+cd12**2)
         dy = np.sqrt(cd21**2+cd22**2)
@@ -218,11 +221,18 @@ class GalfitTask:
             tbl['kron_flux'].info.format = '.2f'
             print(tbl)
 
-            sersic.position = (round(_read_header(file[0], 'CEN_X')),
-                               round(_read_header(file[0], 'CEN_Y')))
+            sersic.position = (round(_read_header(file[0], 'CEN_X', default = 200)),
+                               round(_read_header(file[0], 'CEN_Y', default = 200)))
             # Seems like it is transposed
             map_label = segment_map.data[sersic.position[1],
                                          sersic.position[0]]
+            
+            if map_label == 0:
+                #find the nearest component
+                dists2 = []
+                for i in range(len(tbl['xcentroid'])):
+                    dists2.append((tbl['xcentroid'][i] - sersic.position[0])**2 + (tbl['ycentroid'][i] - sersic.position[1])**2)
+                map_label = np.argmin(np.array(dists2)) + 1
 
             # Which one to use? kron or segment?
             total_flux = tbl['kron_flux'][map_label - 1]
