@@ -221,8 +221,11 @@ class GalfitTask:
             tbl['kron_flux'].info.format = '.2f'
             print(tbl)
 
-            sersic.position = (round(_read_header(file[0], 'CEN_X', default = 200)),
-                               round(_read_header(file[0], 'CEN_Y', default = 200)))
+            mid_x = round(_read_header(file[0], 'NAXIS2')/2)
+            mid_y = round(_read_header(file[0], 'NAXIS1')/2)
+
+            sersic.position = (round(_read_header(file[0], 'CEN_X', default = mid_x)),
+                               round(_read_header(file[0], 'CEN_Y', default = mid_y)))
             # Seems like it is transposed
             map_label = segment_map.data[sersic.position[1],
                                          sersic.position[0]]
