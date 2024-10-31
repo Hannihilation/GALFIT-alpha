@@ -1,3 +1,4 @@
+from task import Config
 from simple_env import GalfitEnv
 from galfit_alpha import GalfitAlpha
 from DQL import DeepQLearning
@@ -6,40 +7,58 @@ from numpy import random
 import torch
 import argparse
 from torchinfo import summary
+from pathlib import Path
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-d', '--data', type=str,
-                    default='CGS', help='select data set')
-parser.add_argument('-m', '--multithread', type=int,
-                    default=1, help='use multithread with n threads')
+parser.add_argument('-d', '--data', type=str, default='CGS',
+                    help='select data set', choices=['S82', 'CGS'])
+parser.add_argument('-m', '--multithread', type=int, default=1,
+                    help='use multithread with n threads', metavar='n')
 parser.add_argument('-t', '--train-size', type=int,
-                    default=10, help='set train size')
+                    default=10, help='set train size', metavar='size')
 parser.add_argument('-b', '--batch-size', type=int,
-                    default=32, help='set batch size')
-parser.add_argument('-e', '--epoch', type=int, default=100, help='set epoch')
-parser.add_argument('-ls', '--learning-step', type=int,
-                    default=10, help='set steps between learning')
+                    default=32, help='set batch size', metavar='size')
+parser.add_argument('-e', '--epoch', type=int, default=100,
+                    help='set epoch', metavar='epoch')
+parser.add_argument('-ls', '--learning-step', type=int, default=10,
+                    help='set steps between learning', metavar='step')
 parser.add_argument('-o', '--output-model', type=str,
-                    default='./model.pkl', help='set output model path')
+                    default='./model.pkl', help='set output model path', metavar='path')
 parser.add_argument('-s', '--summary', action='store_true',
                     help='show model summary')
 
-os_name = platform.system()
-if os_name == 'Darwin':
-    train_size = 2
-    train_file = ('IC5240', 'NGC1326')
-    test_file = ('IC5240', 'NGC1326')
-elif os_name == 'Linux':
-    CGS_file = ('IC5240', 'NGC945', 'NGC1326', 'NGC1357', 'NGC1411', 'NGC1533', 'NGC1600',
-                'NGC2784', 'NGC6118', 'NGC7083', 'NGC7329')
-    train_size = 2
-    # train_file = random.choice(CGS_file, train_size, replace=False)
-    train_file = ('NGC1326', 'IC5240')
-    # test_file = (x for x in CGS_file if x not in train_file)
-pre_path = './CGS/'
+
+def sum(batch_size):
+    Q_net = GalfitAlpha(GalfitEnv.state_num, GalfitEnv.channel_num,
+                        GalfitEnv.image_size, GalfitEnv.action_num, 'cpu')
+    summary(Q_net.float(), [(batch_size, GalfitEnv.state_num),
+                            (batch_size, GalfitEnv.channel_num,
+                            GalfitEnv.image_size, GalfitEnv.image_size)],
+            device='cpu')
 
 
-def run():
+def gen_data(data, size):
+    if data == "S82":
+        path = Path('./S82')
+        total = [f for f in path.glob('**/*.fits') if f.stem[-1].isdigit()]
+        masks = list(path.glob('**/*_mm.fits'))
+        psf = [path / 'psf_r_cut65x65.fits'] * len(total)
+    elif data == "CGS":
+        path = Path('./CGS')
+        total = list(path.glob('**/*_R_reg.fits'))
+        masks = list(path.glob('**/*_R_reg_mm.fits'))
+        psf = list(path.glob('**/*_R_reg_ep.fits'))
+    else:
+        raise ValueError("data set must be 'S82' or 'CGS'")
+
+    train_index = random.choice(len(total), size, replace=False)
+    test_index = [i for i in range(len(total)) if i not in train_index]
+    train_data = [(total[i], masks[i], psf[i]) for i in train_index]
+    test_data = [(total[i], masks[i], psf[i]) for i in test_index]
+    return train_data, test_data
+
+
+def run(train_data, test_data, train_size):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training on {device}")
 
@@ -48,8 +67,11 @@ def run():
     DQL = DeepQLearning(Q_net, 0.01, 0.9, 0.9, 1000, args.batch_size)
     step = 0
     for i in range(args.epoch):
-        galaxy = train_file[i % train_size]
-        env = GalfitEnv(pre_path+galaxy+'/'+galaxy+'_R_reg.fits')
+        galaxy = train_data[i % train_size]
+        config = Config(input_file=galaxy[0].as_posix(),
+                        mask_file=galaxy[1].as_posix(),
+                        psf_file=galaxy[2].as_posix())
+        env = GalfitEnv(config)
         s = env.current_state
         while True:
             a = DQL.choose_action(s)
@@ -66,18 +88,10 @@ def run():
     DQL.plot_loss()
 
 
-def sum(batch_size):
-    Q_net = GalfitAlpha(GalfitEnv.state_num, GalfitEnv.channel_num,
-                        GalfitEnv.image_size, GalfitEnv.action_num, 'cpu')
-    summary(Q_net.float(), [(batch_size, GalfitEnv.state_num),
-                            (batch_size, GalfitEnv.channel_num,
-                            GalfitEnv.image_size, GalfitEnv.image_size)],
-            device='cpu')
-
-
 if __name__ == '__main__':
     args = parser.parse_args()
     if args.summary:
         sum(args.batch_size)
     else:
-        run()
+        train_data, test_data = gen_data(args.data, args.train_size)
+        run(train_data, test_data, args.train_size)
