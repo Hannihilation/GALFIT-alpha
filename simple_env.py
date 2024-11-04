@@ -35,7 +35,7 @@ class GalfitEnv:
         init_file = self._task.config._input.value.replace('.fits', '.init')
         self.init_image = self._task.config._output.value.replace(
             '.fits', '.save')
-        if os.path.exists(init_file):
+        if os.path.exists(init_file) and os.path.exists(self.init_image):
             self._chi2 = self._task.read_component(init_file)
             self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
             self._current_code = -1

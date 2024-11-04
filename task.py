@@ -17,7 +17,8 @@ def _read_header(hdu, key, default=None):
 
 
 class Config:
-    def __init__(self, input_file, output_file=None, psf_file=None, sigma_file='none', mask_file=None):
+    def __init__(self, input_file, output_file=None, psf_file=None, sigma_file='none',
+                 mask_file=None, psf_scale=None, zeropoint=None, pixel_scale=None):
         self._input = StrParam('A', input_file)
         if output_file is None:
             output_file = input_file.replace('.fits', '_out.fits')
@@ -32,8 +33,9 @@ class Config:
         self._mode = StrParam('P', 0)
         input_file = fits.open(self._input.value)
         psf_file = fits.open(self._psf.value)
-        scale = _read_header(psf_file[0], 'SCALE')
-        self._psf_scale = StrParam('E', scale)
+        if psf_scale is None:
+            psf_scale = _read_header(psf_file[0], 'SCALE')
+        self._psf_scale = StrParam('E', psf_scale)
         self._constrains = StrParam('G', 'none')
         in_s1 = _read_header(input_file[0], 'NAXIS1')
         in_s2 = _read_header(input_file[0], 'NAXIS2')
@@ -41,14 +43,18 @@ class Config:
         psf_s1 = _read_header(psf_file[0], 'NAXIS1')
         psf_s2 = _read_header(psf_file[0], 'NAXIS2')
         self._convolution_size = StrParam('I', f"{psf_s1} {psf_s2}")
-        zp = _read_header(input_file[0], 'ZPT_GSC')
-        self._zeropoint = StrParam('J', zp)
-        cd11 = _read_header(input_file[0], 'CD1_1')
-        cd12 = _read_header(input_file[0], 'CD1_2', default=0)
-        cd21 = _read_header(input_file[0], 'CD2_1', default=0)
-        cd22 = _read_header(input_file[0], 'CD2_2')
-        dx = np.sqrt(cd11**2+cd12**2)
-        dy = np.sqrt(cd21**2+cd22**2)
+        if zeropoint is None:
+            zeropoint = _read_header(input_file[0], 'ZPT_GSC', default=24)
+        self._zeropoint = StrParam('J', zeropoint)
+        if pixel_scale is None:
+            cd11 = _read_header(input_file[0], 'CD1_1')
+            cd12 = _read_header(input_file[0], 'CD1_2', default=0)
+            cd21 = _read_header(input_file[0], 'CD2_1', default=0)
+            cd22 = _read_header(input_file[0], 'CD2_2')
+            dx = np.sqrt(cd11**2+cd12**2)
+            dy = np.sqrt(cd21**2+cd22**2)
+        else:
+            dx, dy = pixel_scale, pixel_scale
         self._pixel_scale = StrParam('K', f"{dx} {dy}")
         self._display_type = StrParam('O', 'regular')
         input_file.close()
@@ -208,8 +214,7 @@ class GalfitTask:
             segment_map = finder(convolved_data, threshold)
             # print(segment_map)
             if (segment_map == None):
-                print("Source finding failure. Try reduce threshold.\n")
-                return
+                raise ValueError("Source finding failure. Try reduce threshold.")
 
             cat = SourceCatalog(data, segment_map,
                                 convolved_data=convolved_data)
@@ -219,23 +224,26 @@ class GalfitTask:
             tbl['xcentroid'].info.format = '.2f'  # optional format
             tbl['ycentroid'].info.format = '.2f'
             tbl['kron_flux'].info.format = '.2f'
-            print(tbl)
+            print(tbl['xcentroid', 'ycentroid', 'kron_flux', 'area'])
 
-            mid_x = round(_read_header(file[0], 'NAXIS2')/2)
-            mid_y = round(_read_header(file[0], 'NAXIS1')/2)
+            mid_x = _read_header(file[0], 'NAXIS2')/2
+            mid_y = _read_header(file[0], 'NAXIS1')/2
 
-            sersic.position = (round(_read_header(file[0], 'CEN_X', default = mid_x)),
-                               round(_read_header(file[0], 'CEN_Y', default = mid_y)))
+            position = (_read_header(file[0], 'CEN_X', default = mid_x),
+                               _read_header(file[0], 'CEN_Y', default = mid_y))
             # Seems like it is transposed
-            map_label = segment_map.data[sersic.position[1],
-                                         sersic.position[0]]
-            
+            map_label = segment_map.data[round(position[1]),
+                                         round(position[0])]
             if map_label == 0:
                 #find the nearest component
-                dists2 = []
+                min_dist = 10000000
                 for i in range(len(tbl['xcentroid'])):
-                    dists2.append((tbl['xcentroid'][i] - sersic.position[0])**2 + (tbl['ycentroid'][i] - sersic.position[1])**2)
-                map_label = np.argmin(np.array(dists2)) + 1
+                    dist = (tbl['xcentroid'][i] - position[0])**2 + (tbl['ycentroid'][i] - position[1])**2
+                    if dist < min_dist:
+                        min_dist = dist
+                        map_label = i + 1
+            sersic.position = (tbl['xcentroid'][map_label - 1],
+                              tbl['ycentroid'][map_label - 1])
 
             # Which one to use? kron or segment?
             total_flux = tbl['kron_flux'][map_label - 1]
@@ -246,6 +254,6 @@ class GalfitTask:
             sersic.effective_radius = round(
                 np.sqrt(tbl['area'][map_label - 1].value))
 
-            sersic.axis_ratio = 1-float(_read_header(file[0], 'ELL_E'))
-            sersic.position_angle = float(_read_header(file[0], 'ELL_PA'))
+            sersic.axis_ratio = 1-float(_read_header(file[0], 'ELL_E', default=0.25))
+            sersic.position_angle = float(_read_header(file[0], 'ELL_PA', default=0))
             self.add_component(sersic)
