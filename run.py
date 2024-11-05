@@ -9,7 +9,7 @@ from torchinfo import summary
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-d', '--data', type=str, default='CGS',
+parser.add_argument('-d', '--data', type=str, default='S82',
                     help='select data set', choices=['S82', 'CGS'])
 parser.add_argument('-m', '--multithread', type=int, default=1,
                     help='use multithread with n threads', metavar='n')

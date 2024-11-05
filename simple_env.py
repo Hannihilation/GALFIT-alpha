@@ -33,19 +33,24 @@ class GalfitEnv:
     def __init__(self, config: Config) -> None:
         self._task = GalfitTask(config)
         init_file = self._task.config._input.value.replace('.fits', '.init')
-        self.init_image = self._task.config._output.value.replace(
+        self._output_file = self._task.config._output.value.replace(
             '.fits', '.save')
-        if os.path.exists(init_file) and os.path.exists(self.init_image):
+        if os.path.exists(init_file) and os.path.exists(self._output_file):
             self._chi2 = self._task.read_component(init_file)
-            self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
-            self._current_code = -1
         else:
             self._task.init_guess()
-            self._update_state()
-            shutil.move(self._task.config._output.value, self.init_image)
+            if os.path.exists('./galfit.01'):
+                os.remove('./galfit.01')
+            crash = self._task.run()
+            if crash:
+                raise ValueError('Galfit crashed at init guess!')
+            self._chi2 = self._task.read_component('./galfit.01')
+            shutil.move(self._task.config._output.value, self._output_file)
             with open(init_file, 'w') as file:
-                print(f'#  Chi^2/nu = {self._base_chi2}', file=file)
+                print(f'#  Chi^2/nu = {self._chi2}', file=file)
                 print(self._task, file=file)
+        self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
+        self._current_code = -1
         self._base_chi2 = self._chi2
         self._mag_limit = self._task.components[1].magnitude + \
             self.mag_maxgap
@@ -53,10 +58,14 @@ class GalfitEnv:
     def _update_state(self):
         if os.path.exists('./galfit.01'):
             os.remove('./galfit.01')
-        self._task.run()
-        self._chi2 = self._task.read_component('./galfit.01')
+        crash = self._task.run()
         self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
+        if crash:
+            self._current_code = 0
+            return
+        self._chi2 = self._task.read_component('./galfit.01')
         self._current_code = -1
+        self._output_file = self._task.config._output.value
 
     def _split(self, target_index):
         min_redius = 1000000
@@ -146,12 +155,7 @@ class GalfitEnv:
 
     @property
     def current_state(self):
-        if self.init_image is not None:
-            output_file = self.init_image
-            self.init_image = None
-        else:
-            output_file = self._task.config._output.value
-        with fits.open(output_file) as hdus:
+        with fits.open(self._output_file) as hdus:
             residual = np.array(hdus[3].data)
             model = np.array(hdus[2].data)
         image = from_numpy(np.array([residual, model], dtype=np.float64))

@@ -142,8 +142,9 @@ class GalfitTask:
                 line = file.readline()
         return chi2
 
-    def _galfit_output(self, str):
+    def _galfit_output(self, str: str):
         state = 0
+        returncode = 0
         for line in str.split('\n'):
             if state == 1:
                 if line.startswith('======'):
@@ -163,22 +164,24 @@ class GalfitTask:
             elif line.startswith('Iteration :'):
                 tmp = line + '\n'
                 state = 2
+            elif line.startswith('   Doh!  GALFIT crashed'):
+                returncode = 1
         print(tmp)
+        return returncode
 
     def run(self, galfit_file=None, galfit_mode=0):
         self.config.galfit_mode = galfit_mode
-        if galfit_file is not None:
-            with open(galfit_file, 'w') as file:
-                print(self, file=file)
-            result = subprocess.run(['./galfit', galfit_file],
-                                    capture_output=True, text=True)
-        else:
-            result = subprocess.run(['./galfit'], input=str(self),
-                                    capture_output=True, text=True)
-        self._galfit_output(result.stdout)
+        if galfit_file is None:
+            galfit_file = self.config._output.value.replace('.fits', '.galfit')
+        with open(galfit_file, 'w') as file:
+            print(self, file=file)
+        result = subprocess.run(['./galfit', galfit_file],
+                                capture_output=True, text=True)
+        crash = self._galfit_output(result.stdout)
         if result.stderr:
             print(result.stderr)
-        result.check_returncode()
+        # result.check_returncode()
+        return crash
 
     def init_guess(self):
         with fits.open(self._config._input.value) as file:
