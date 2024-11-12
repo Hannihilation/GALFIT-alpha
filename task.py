@@ -1,9 +1,15 @@
 from components import *
 from astropy.io import fits
 import subprocess
+import time
 import os
 from photutils.segmentation import SourceFinder, SourceCatalog
 from photutils.background import Background2D, MedianBackground
+import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
+import astropy.visualization as vis
+import photutils.isophote as iso
+from photutils.aperture import EllipticalAperture
 
 
 def _read_header(hdu, key, default=None):
@@ -72,6 +78,26 @@ class Config:
         self._mode.value = mode
 
     @property
+    def input_file(self):
+        return self._input.value
+
+    @property
+    def output_file(self):
+        return self._output.value
+
+    @property
+    def mask_file(self):
+        return self._mask.value
+
+    @property
+    def psf_file(self):
+        return self._psf.value
+
+    @property
+    def sigma_file(self):
+        return self._sigma.value
+
+    @property
     def pixel_scale(self):
         value = re.split(r'\s+', self._pixel_scale.value)
         dx, dy = float(value[0]), float(value[1])
@@ -96,6 +122,175 @@ class Config:
         for param in self.parameters:
             s += param.__repr__() + '\n'
         return s
+
+    def _plot_model(self, hdu, ax, cut_coeff=None, min_max=None, is_origin=False):
+        # if plot_type == 'data':
+        #     input_file = fits.open(self.input_file)
+        #     data = input_file[0].data
+        # elif plot_type == 'model':
+        #     output_file = fits.open(self.output_file)
+        #     data = output_file[2].data
+
+        data = hdu.data
+
+        if is_origin:
+            with fits.open(self.mask_file) as mask:
+                mask_data = mask[0].data
+                data = data * (1-mask_data)
+        min_value = np.min(data)
+        offset = abs(min_value) if min_value < 0 else 0
+        data += offset
+        if cut_coeff is not None:
+            interval = vis.PercentileInterval(cut_coeff)
+        elif min_max is not None:
+            interval = vis.ManualInterval(*min_max)
+        else:
+            interval = vis.MinMaxInterval()
+        norm = vis.ImageNormalize(data, interval=interval,
+                                  stretch=vis.LogStretch(), clip=True)
+        ax.imshow(data, cmap='gray', origin='lower', norm=norm)
+
+    def _plot_1Dpro(self, hdu, axs, types, label=None, is_origin=False,
+                    is_comp=False, show_iso=False, sky = None, sma = 20, eps = 0.7, pa = 0, minsma = 5, maxsma = None, step=0.05, fix_center=False):
+        data = hdu.data
+        if is_origin:
+            with fits.open(self.mask_file) as mask:
+                data = np.ma.array(data, mask=(mask[0].data == 1))
+
+        if (sky is not None) and (not is_comp):
+            data -= sky
+
+        mid_x = data.shape[0] / 2
+        mid_y = data.shape[1] / 2
+
+        x0, y0 = (_read_header(hdu, 'CEN_X', default = mid_x),
+                               _read_header(hdu, 'CEN_Y', default = mid_y))
+        
+        # if self._cen_pos is None:
+        #     x0 = data.shape[0] / 2
+        #     y0 = data.shape[1] / 2
+        # else:
+        #     x0, y0 = self._cen_pos
+
+        geometry = iso.EllipseGeometry(x0=x0, y0=y0, sma=sma,
+                                       eps=eps, pa=pa)
+        ellipse = iso.Ellipse(data, geometry=geometry)
+        # ellipse = iso.Ellipse(data)
+        isolist = ellipse.fit_image(
+            minsma=minsma, maxsma=maxsma, step=step,
+            fix_center=fix_center)
+        sma_list = isolist.sma
+        sma_list = sma_list * self.pixel_scale
+
+        intens = isolist.intens
+        intens_err = isolist.int_err
+        mu = -2.5 * np.log10(intens) + self.zeropoint
+        mu_err = 2.5 / np.log(10) * intens_err / intens
+        pa = (isolist.pa * 180 / np.pi - 90) % 180
+
+        out_list = {'pa': pa, 'pa_err': isolist.pa_err * 180 / np.pi,
+                    'eps': isolist.eps, 'eps_err': isolist.ellip_err,
+                    'mu': mu, 'mu_err': mu_err}
+        print(out_list)
+        time.sleep(3)
+        if len(pa) == 0:
+            print('No meaningful fit was possible. Continue to next figure.')
+            return
+        for ax, type in zip(axs, types):
+            if is_origin:
+                ax.errorbar(sma_list, out_list[type], out_list[type+'_err'], fmt='o',
+                            markersize=2, markeredgewidth=0.5, capsize=3, label=label)
+                if type == 'pa':
+                    ax.set_ylim(0, 180)
+                elif type == 'eps':
+                    ax.set_ylim(0, 1)
+                elif type == 'mu':
+                    ymargin = np.ptp(out_list['mu']) * 0.1
+                    ymin = np.min(out_list['mu']) - ymargin
+                    ymax = np.max(out_list['mu']) + ymargin
+                    xmax = np.max(sma_list) * 1.1
+                    ax.set_xlim(0, xmax)
+                    ax.set_ylim(ymax, ymin)
+            else:
+                ax.plot(sma_list, out_list[type],
+                        label=label, linestyle='--', linewidth=0.5)
+
+        if show_iso:
+            fig = plt.figure()
+            ax = fig.add_subplot()
+            self._plot_model(hdu, ax, cut_coeff=99.5)
+            for i in range(5, len(sma_list), 5):
+                aper = EllipticalAperture((isolist.x0[i], isolist.y0[i]),
+                                          isolist.sma[i], isolist.sma[i] *
+                                          (1 - isolist.eps[i]),
+                                          isolist.pa[i])
+                aper.plot(ax)
+            fig.savefig('iso.pdf', format='pdf')
+            # fig.show()
+
+    def plot(self, cut_coeff=99.5, pro_1D=True, components=None):
+        fig = plt.figure(figsize=(7, 7))
+        gs = GridSpec(3, 2, figure=fig, hspace=0, wspace=0)
+        axs = np.array([[fig.add_subplot(gs[i, j])
+                       for j in range(2)] for i in range(3)])
+        with fits.open(self.output_file) as model:
+            for hdu in model[1:]:
+                type = hdu.header['OBJECT']
+                type.strip()
+                if type == 'model':
+                    print(f'Working on {type}')
+                    self._plot_model(hdu, axs[1, 1], cut_coeff=cut_coeff)
+                    if pro_1D:
+                        self._plot_1Dpro(
+                            hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='model')
+                elif type == 'residual map':
+                    print(f'Working on {type}')
+                    self._plot_model(hdu, axs[2, 1], cut_coeff=cut_coeff)
+                else:
+                    print(f'Working on original data')
+                    self._plot_model(
+                        hdu, axs[0, 1], cut_coeff=cut_coeff, is_origin=True)
+                    if pro_1D:
+                        self._plot_1Dpro(
+                            hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='origin', is_origin=True, show_iso=True)
+
+        if components is not None and pro_1D:
+            with fits.open(components) as comps:
+                for i, hdu in enumerate(comps[1:]):
+                    type = hdu.header['OBJECT']
+                    type.strip()
+                    if type == 'sky':
+                        continue
+                    if type in component_names:
+                        self._plot_1Dpro(
+                            hdu, axs[2:, 0], ['mu'], label=type+str(i),
+                            is_comp=True)
+
+        axs[2, 0].legend()
+        axs[0, 0].set_ylabel('$\epsilon$')
+        axs[1, 0].set_ylabel('PA (degree)')
+        axs[2, 0].set_ylabel('$\mu_R$ (mag/arcsec^2)')
+        for a in axs[:, 1]:
+            a.set_xticks([])
+            a.set_yticks([])
+        axs[0, 0].set_xticks([])
+        axs[1, 0].set_xticks([])
+        axs[2, 0].set_xlabel('Radius (arcsec)')
+
+        # plt.show()
+        fig_file = self.output_file.replace('.fits', '.pdf')
+        fig.savefig(fig_file, format='pdf')
+
+    def plot_comps(self, cut_coeff=99.5):
+        with fits.open('./subcomps.fits') as comps:
+            length = len(comps)
+            fig, ax = plt.subplots(1, length)
+            for i, hdu in enumerate(comps):
+                self._plot_model(hdu, ax[i], cut_coeff=cut_coeff)
+            plt.legend()
+            # plt.show()
+            fig_file = self.config.output_file.replace('.fits', '_comps.pdf')
+            plt.savefig(fig_file, format='pdf')
 
 
 class GalfitTask:

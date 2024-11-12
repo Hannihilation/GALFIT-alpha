@@ -8,3 +8,4 @@ fig/
 fit.log
 __pycache__/
 *.log
+*.pkl

@@ -11,8 +11,7 @@ import shutil
 
 # code_state = ['bulge', 'disk', 'bar', 'bulge&disk',
 #               'disk&bar', 'bulge&bar', 'bulge&disk&bar', 'error']
-code_state = ['error', 'bulge', 'disk', 'bulge&disk',
-              'bar', 'bulge&bar', 'disk&bar', 'bulge&disk&bar']
+code_state = ['error', 'bulge', 'bulge&disk', 'bulge&disk&bar']
 
 state_code = {}
 for i, s in enumerate(code_state):
@@ -27,13 +26,13 @@ class GalfitEnv:
     mag_maxgap = 5
     channel_num = 2
     state_num = 2
-    action_num = 5
+    action_num = 4
     image_size = 256
 
     def __init__(self, config: Config) -> None:
         self._task = GalfitTask(config)
-        init_file = self._task.config._input.value.replace('.fits', '.init')
-        self._output_file = self._task.config._output.value.replace(
+        init_file = self._task.config.input_file.replace('.fits', '.init')
+        self._output_file = self._task.config.output_file.replace(
             '.fits', '.save')
         if os.path.exists(init_file) and os.path.exists(self._output_file):
             self._chi2 = self._task.read_component(init_file)
@@ -84,25 +83,30 @@ class GalfitEnv:
 
     def step(self, action: int):
         """
-        :param action: int, switch_sky: 0, split_disk: 1, split_bar: 2, free_bulge: 3, stop: 4
+        :param action: int, switch_sky: 0, split: 1, free_bulge: 2, stop: 3
 
         :returns (current_state, reward, done)
         """
-        if action == 4:
+        change = True
+        if action == 3:
             return self.current_state, self.reward, True
         elif action == 0:
             self._task.components[0].__background__.trainable ^= 1
         elif action == 1:
-            self._split(1)
+            if self.current_code == state_code['bulge']:
+                self._split(1)
+            elif self.current_code == state_code['bulge&disk']:
+                self._split(0.5)
+            else:
+                change = False
         elif action == 2:
-            self._split(0.5)
-        elif action == 3:
             for c in self._task.components[1:]:
-                if c.__sersic_index__.trainable:
-                    c.set_sersic_index(4, False)
-                elif c.sersic_index == 4:
-                    c.set_sersic_index(trainable=True)
-        self._update_state()
+                if not c.__sersic_index__.trainable:
+                    c.set_sersic_index(4, True)
+                else:
+                    change = False
+        if change:
+            self._update_state()
         return self.current_state, self.reward, self.current_code == 0
 
     @property
@@ -112,31 +116,22 @@ class GalfitEnv:
             bulge_radius = 0
             disk_radius = 10000
             for c in self._task.components[1:]:
+                self._current_code += 1
                 if c.__sersic_index__.trainable:
                     if c.sersic_index > 7 or c.sersic_index < 2.5:
                         self._current_code = 0
                         break
-                    add_code = 1
                     bulge_radius = c.effective_radius
                 elif c.sersic_index == 4:
-                    add_code = 1
                     bulge_radius = c.effective_radius
                 elif c.sersic_index == 1:
-                    add_code = 2
                     disk_radius = c.effective_radius
-                elif c.sersic_index == 0.5:
-                    add_code = 4
-                if self._current_code & add_code:
-                    self._current_code = 0
-                    break
                 if c.magnitude > self._mag_limit:  # 限定mag_limit 为 mag_baseline + mag_maxgap, 其中 mag_baseline 为初始 sersic 的 magnitude
                     self._current_code = 0
-                    print(c.magnitude, self._mag_limit, 'c')
                     break
                 if c.effective_radius < 2 or c.effective_radius > max(self._task.config.image_size) / 2:
                     self._current_code = 0
                     break
-                self._current_code += add_code
             if bulge_radius > disk_radius:
                 self._current_code = 0
         return self._current_code

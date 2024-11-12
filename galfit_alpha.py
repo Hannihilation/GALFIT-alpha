@@ -60,7 +60,7 @@ class GalfitAlpha(nn.Module):
         for i in range(1000):
             output = self(state_code, figs)
             l = loss(output, y)
-            loss_his.append(l)
+            loss_his.append(l.cpu().detach().numpy())
             optimizer.zero_grad()
             l.backward()
             optimizer.step()

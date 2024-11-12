@@ -17,7 +17,7 @@ parser.add_argument('-t', '--train-size', type=int,
                     default=10, help='set train size', metavar='size')
 parser.add_argument('-b', '--batch-size', type=int,
                     default=32, help='set batch size', metavar='size')
-parser.add_argument('-e', '--epoch', type=int, default=100,
+parser.add_argument('-e', '--epoch', type=int, default=1000,
                     help='set epoch', metavar='epoch')
 parser.add_argument('-ls', '--learning-step', type=int, default=10,
                     help='set steps between learning', metavar='step')
@@ -25,6 +25,8 @@ parser.add_argument('-o', '--output-model', type=str,
                     default='./model.pkl', help='set output model path', metavar='path')
 parser.add_argument('-s', '--summary', action='store_true',
                     help='show model summary')
+parser.add_argument('-p', '--plot-figure', action='store_true',
+                    help='plot figure after training')
 
 
 def sum(batch_size):
@@ -34,6 +36,15 @@ def sum(batch_size):
                             (batch_size, GalfitEnv.channel_num,
                             GalfitEnv.image_size, GalfitEnv.image_size)],
             device='cpu')
+
+
+def plot_final_image(log_file, train_size):
+    with open(log_file, 'r') as file:
+        for input_file in file.readlines()[:train_size]:
+            input_file = input_file.strip('\n')
+            config = Config(input_file=input_file, psf_file='S82/psf_r_cut65x65.fits',
+                            pixel_scale=0.396, psf_scale=1, zeropoint=24)
+            config.plot(pro_1D=True)
 
 
 def gen_data(data, size):
@@ -92,13 +103,16 @@ def run(train_data, test_data, psf_scale, zeropoint, pixel_scale):
             if done:
                 break
             s = s_
-    DQL.eval_net.save(args.output_model)
+    # DQL.eval_net.save(args.output_model)
+    torch.save(DQL.eval_net.state_dict(), args.output_model)
     DQL.plot_loss()
 
 if __name__ == '__main__':
     args = parser.parse_args()
     if args.summary:
         sum(args.batch_size)
+    elif args.plot_figure:
+        plot_final_image('./run.log', args.train_size)
     else:
         data = gen_data(args.data, args.train_size)
         print(*(d[0] for d in data[0]), sep='\n')
