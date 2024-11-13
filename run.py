@@ -43,7 +43,7 @@ def plot_final_image(log_file, train_size):
         for input_file in file.readlines()[:train_size]:
             input_file = input_file.strip('\n')
             config = Config(input_file=input_file, psf_file='S82/psf_r_cut65x65.fits',
-                            pixel_scale=0.396, psf_scale=1, zeropoint=24)
+                            pixel_scale=0.396 / 3600, psf_scale=1, zeropoint=24)
             config.plot(pro_1D=True)
 
 

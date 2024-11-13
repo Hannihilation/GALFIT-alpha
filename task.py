@@ -24,7 +24,7 @@ def _read_header(hdu, key, default=None):
 
 class Config:
     def __init__(self, input_file, output_file=None, psf_file=None, sigma_file='none',
-                 mask_file=None, psf_scale=None, zeropoint=None, pixel_scale=None):
+                 mask_file=None, psf_scale=None, zeropoint=None, pixel_scale=None, galaxy_range = None):
         self._input = StrParam('A', input_file)
         if output_file is None:
             output_file = input_file.replace('.fits', '_out.fits')
@@ -46,6 +46,8 @@ class Config:
         in_s1 = _read_header(input_file[0], 'NAXIS1')
         in_s2 = _read_header(input_file[0], 'NAXIS2')
         self._image_region = StrParam('H', f"1 {in_s1} 1 {in_s2}")
+        self._galaxy_range = galaxy_range
+
         psf_s1 = _read_header(psf_file[0], 'NAXIS1')
         psf_s2 = _read_header(psf_file[0], 'NAXIS2')
         self._convolution_size = StrParam('I', f"{psf_s1} {psf_s2}")
@@ -53,6 +55,7 @@ class Config:
             zeropoint = _read_header(input_file[0], 'ZPT_GSC', default=24)
         self._zeropoint = StrParam('J', zeropoint)
         if pixel_scale is None:
+            # print('pixel scale is None')
             cd11 = _read_header(input_file[0], 'CD1_1')
             cd12 = _read_header(input_file[0], 'CD1_2', default=0)
             cd21 = _read_header(input_file[0], 'CD2_1', default=0)
@@ -60,8 +63,13 @@ class Config:
             dx = np.sqrt(cd11**2+cd12**2)
             dy = np.sqrt(cd21**2+cd22**2)
         else:
+            # print('pixel scale found')
             dx, dy = pixel_scale, pixel_scale
         self._pixel_scale = StrParam('K', f"{dx} {dy}")
+        #### DEBUG ####
+        # print(self._pixel_scale)
+        # print(self.pixel_scale)
+        ###############
         self._display_type = StrParam('O', 'regular')
         input_file.close()
         psf_file.close()
@@ -116,6 +124,10 @@ class Config:
             value = re.split(r'\s+', value)
             return float(value[0])
         return value
+    
+    @property
+    def galaxy_range(self):
+        return self._galaxy_range
 
     def __repr__(self) -> str:
         s = ''
@@ -123,7 +135,7 @@ class Config:
             s += param.__repr__() + '\n'
         return s
 
-    def _plot_model(self, hdu, ax, cut_coeff=None, min_max=None, is_origin=False):
+    def _plot_model(self, hdu, ax, cut_coeff=None, min_max=None, is_origin=False, cut_margin = False):
         # if plot_type == 'data':
         #     input_file = fits.open(self.input_file)
         #     data = input_file[0].data
@@ -148,6 +160,11 @@ class Config:
             interval = vis.MinMaxInterval()
         norm = vis.ImageNormalize(data, interval=interval,
                                   stretch=vis.LogStretch(), clip=True)
+        if cut_margin and self._galaxy_range is not None:
+            l_margin, r_margin = self.galaxy_range
+            data = data[l_margin:r_margin, l_margin:r_margin]
+        # print(l_margin,r_margin)
+        # print(len(data))
         ax.imshow(data, cmap='gray', origin='lower', norm=norm)
 
     def _plot_1Dpro(self, hdu, axs, types, label=None, is_origin=False,
@@ -208,9 +225,10 @@ class Config:
                     ymargin = np.ptp(out_list['mu']) * 0.1
                     ymin = np.min(out_list['mu']) - ymargin
                     ymax = np.max(out_list['mu']) + ymargin
-                    xmax = np.max(sma_list) * 1.1
-                    ax.set_xlim(0, xmax)
                     ax.set_ylim(ymax, ymin)
+                xmax = np.max(sma_list) * 1.1
+                ax.set_xlim(0, xmax)
+                
             else:
                 ax.plot(sma_list, out_list[type],
                         label=label, linestyle='--', linewidth=0.5)
@@ -233,23 +251,28 @@ class Config:
         gs = GridSpec(3, 2, figure=fig, hspace=0, wspace=0)
         axs = np.array([[fig.add_subplot(gs[i, j])
                        for j in range(2)] for i in range(3)])
+        if self._galaxy_range is None:
+            # print('before: ', self.galaxy_range)
+            GalfitTask(self).init_guess()
+            # print('after: ', self.galaxy_range)
+            # l_margin, r_margin = self.galaxy_range
         with fits.open(self.output_file) as model:
             for hdu in model[1:]:
                 type = hdu.header['OBJECT']
                 type.strip()
                 if type == 'model':
                     print(f'Working on {type}')
-                    self._plot_model(hdu, axs[1, 1], cut_coeff=cut_coeff)
+                    self._plot_model(hdu, axs[1, 1], cut_coeff=cut_coeff, cut_margin=True)
                     if pro_1D:
                         self._plot_1Dpro(
                             hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='model')
                 elif type == 'residual map':
                     print(f'Working on {type}')
-                    self._plot_model(hdu, axs[2, 1], cut_coeff=cut_coeff)
+                    self._plot_model(hdu, axs[2, 1], cut_coeff=cut_coeff, is_origin=True, cut_margin=True)
                 else:
                     print(f'Working on original data')
                     self._plot_model(
-                        hdu, axs[0, 1], cut_coeff=cut_coeff, is_origin=True)
+                        hdu, axs[0, 1], cut_coeff=cut_coeff, is_origin=True, cut_margin=True)
                     if pro_1D:
                         self._plot_1Dpro(
                             hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='origin', is_origin=True, show_iso=True)
@@ -294,6 +317,8 @@ class Config:
 
 
 class GalfitTask:
+    FIGSIZE_TO_DIAMETER_LIMIT = 5
+
     def __init__(self, config):
         self._config = config
         self._components = []
@@ -451,6 +476,13 @@ class GalfitTask:
 
             sersic.effective_radius = round(
                 np.sqrt(tbl['area'][map_label - 1].value))
+            
+            # Cut the graph to proper size
+            # print('Mid: ', sersic.position[0], ' Radius: ', sersic.effective_radius, ' Fig_size: ', 2*mid_x )
+            if sersic.position[0] + self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius < 2 * mid_x:
+                self.config._galaxy_range = (round(sersic.position[1] - self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius), round(sersic.position[0] + self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius))
+            else:
+                self.config._galaxy_range = (0, _read_header(file[0], 'NAXIS1'))
 
             sersic.axis_ratio = 1-float(_read_header(file[0], 'ELL_E', default=0.25))
             sersic.position_angle = float(_read_header(file[0], 'ELL_PA', default=0))
