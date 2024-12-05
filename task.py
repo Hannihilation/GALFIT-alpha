@@ -426,8 +426,11 @@ class GalfitTask:
             from photutils.segmentation import make_2dgaussian_kernel
             kernel = make_2dgaussian_kernel(3.0, size=5)  # FWHM = 3.0
 
-            with fits.open(self.config._mask.value) as mask:
-                mask_data = mask[0].data
+            if self.config._mask.value == 'none':
+                mask_data = np.zeros_like(data)
+            else:
+                with fits.open(self.config._mask.value) as mask:
+                    mask_data = mask[0].data
             data = (data - bkg.background) * (1 - mask_data)
 
             convolved_data = convolve(data, kernel)

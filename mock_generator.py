@@ -76,8 +76,10 @@ class GalaxyGenerator:
         sky = Sky()
         sky.background = random.uniform(self.sky_limit)
         task.add_component(sky)
-        # count = random.randint(1, 3)
-        count = 3
+        count = random.randint(1, 4)
+        if count == 3:
+            print('with bar')
+        # count = 3
         for comp in self.com_gen(count):
             task.add_component(comp)
         return task
@@ -115,7 +117,7 @@ def gen_data(count):
 
         task.run(galfit_mode=1)
 
-gen_data(5)
+gen_data(100)
 
 
 

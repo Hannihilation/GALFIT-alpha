@@ -35,7 +35,6 @@ class GalfitEnv:
         init_file = self._task.config.input_file.replace('.fits', '.init')
         self._output_file = self._task.config.output_file.replace(
             '.fits', '.save')
-        self._mask_file = config.mask_file
         if os.path.exists(init_file) and os.path.exists(self._output_file):
             self._chi2 = self._task.read_component(init_file)
         else:
@@ -50,22 +49,24 @@ class GalfitEnv:
             with open(init_file, 'w') as file:
                 print(f'#  Chi^2/nu = {self._chi2}', file=file)
                 print(self._task, file=file)
-        self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
-        self._current_code = -1
-        self._base_chi2 = self.chi2
-        self._mag_limit = self._task.components[1].magnitude + \
-            self.mag_maxgap
-        size = self._task.config.image_size
-        x, y = np.meshgrid(np.linspace(-size/2, size/2, size), np.linspace(-size/2, size/2, size))
+
+        s1, s2 = self._task.config.image_size
+        x, y = np.meshgrid(np.linspace(-s1/2, s1/2, s1), np.linspace(-s2/2, s2/2, s2))
+        print(config.galaxy_range)
         half_weight_size = (config.galaxy_range[1] - config.galaxy_range[0]) / 5
         self._image_weight = np.exp2(-(x**2+y**2)/half_weight_size**2)
-
         with fits.open(self._task.config.input_file) as hdul:
             data = np.array(hdul[0].data)
         sky_mean, sky_median, sky_std = sigma_clipped_stats(data, sigma=3.0, maxiters=5)
         total_noise = np.sqrt(np.abs(data) + sky_std **2)
         sigmap = total_noise
         self._sigma_image = sigmap
+
+        self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
+        self._current_code = -1
+        self._base_chi2 = self.chi2
+        self._mag_limit = self._task.components[1].magnitude + \
+            self.mag_maxgap
 
     def _update_state(self):
         if os.path.exists('./galfit.01'):
@@ -154,10 +155,14 @@ class GalfitEnv:
         # return self._chi2
         with fits.open(self._output_file) as hdus:
             residual = np.array(hdus[3].data)
-        with fits.open(self._task.config.mask_file) as mask:
-            mask_data = mask[0].data
+        if self._task.config.mask_file == 'none':
+            mask_data = np.zeros_like(residual)
+        else:
+            with fits.open(self._task.config.mask_file) as mask:
+                mask_data = mask[0].data
 
         chi2 = np.sum(self._image_weight* (1 - mask_data) *np.abs(residual) / self._sigma_image)
+        print(f'weighted chi2: {chi2}')
         return chi2
 
     @property
@@ -178,12 +183,16 @@ class GalfitEnv:
         with fits.open(self._output_file) as hdus:
             residual = np.array(hdus[3].data)
             model = np.array(hdus[2].data)
-        with fits.open(self._mask_file) as mask:
-            residual = residual * (1 - np.array(mask[0].data))
+        if self._task.config.mask_file == 'none':
+            mask_data = np.zeros_like(residual)
+        else:
+            with fits.open(self._task.config.mask_file) as mask:
+                mask_data = mask[0].data
+        residual = residual * (1 - np.array(mask_data))
         image = from_numpy(np.array([residual, model], dtype=np.float64))
         # plt.imshow(np.log(np.abs(image.numpy()[0])))
         # plt.show()
-        (l_margin, r_margin) = self._galaxy_range
+        (l_margin, r_margin) = self._task.config.galaxy_range
         image = transforms.Resize(self.image_size)(image[l_margin:r_margin, l_margin:r_margin]).numpy()
         # plt.imshow(np.log(np.abs(image[0])))
         # plt.show()

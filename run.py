@@ -10,7 +10,7 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--data', type=str, default='S82',
-                    help='select data set', choices=['S82', 'CGS'])
+                    help='select data set', choices=['S82', 'CGS', 'mock'])
 parser.add_argument('-m', '--multithread', type=int, default=1,
                     help='use multithread with n threads', metavar='n')
 parser.add_argument('-t', '--train-size', type=int,
@@ -50,22 +50,30 @@ def plot_final_image(log_file, train_size):
 def gen_data(data, size):
     if data == "S82":
         path = Path('./S82')
-        total = [f for f in path.glob('**/*ID*.fits') if f.stem[-1].isdigit()]
-        masks = list(path.glob('**/*_mm.fits'))
-        psf = [path / 'psf_r_cut65x65.fits'] * len(total)
+        total = [f.as_posix() for f in path.glob('**/*ID*.fits') if f.stem[-1].isdigit()]
+        masks = [f.as_posix() for f in path.glob('**/*_mm.fits')]
+        psf = [(path / 'psf_r_cut65x65.fits').as_posix()] * len(total)
         psf_scale = 1
         zeropoint = 24
         pixel_scale = 0.396
     elif data == "CGS":
         path = Path('./CGS')
-        total = list(path.glob('**/*_R_reg.fits'))
-        masks = list(path.glob('**/*_R_reg_mm.fits'))
-        psf = list(path.glob('**/*_R_reg_ep.fits'))
+        total = [f.as_posix() for f in path.glob('**/*_R_reg.fits')]
+        masks = [f.as_posix() for f in path.glob('**/*_R_reg_mm.fits')]
+        psf = [f.as_posix() for f in path.glob('**/*_R_reg_ep.fits')]
         psf_scale = None
         zeropoint = None
         pixel_scale = None
+    elif data == "mock":
+        path = Path('./mock_galaxy')
+        total = [f.as_posix() for f in path.glob('**/input.fits')]
+        masks = ['none'] * len(total)
+        psf = ['./S82/psf_r_cut65x65.fits'] * len(total)
+        psf_scale = 1
+        zeropoint = 24
+        pixel_scale = 0.396
     else:
-        raise ValueError("data set must be 'S82' or 'CGS'")
+        raise ValueError("data set must be 'S82', 'CGS' or 'mock'")
 
     train_index = random.choice(len(total), size, replace=False)
     test_index = [i for i in range(len(total)) if i not in train_index]
@@ -85,9 +93,9 @@ def run(train_data, test_data, psf_scale, zeropoint, pixel_scale):
     step = 0
     for i in range(args.epoch):
         galaxy = train_data[i % train_size]
-        config = Config(input_file=galaxy[0].as_posix(),
-                        mask_file=galaxy[1].as_posix(),
-                        psf_file=galaxy[2].as_posix(),
+        config = Config(input_file=galaxy[0],
+                        mask_file=galaxy[1],
+                        psf_file=galaxy[2],
                         psf_scale=psf_scale, zeropoint=zeropoint,
                         pixel_scale=pixel_scale)
         env = GalfitEnv(config)
