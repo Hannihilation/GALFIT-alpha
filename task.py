@@ -124,7 +124,7 @@ class Config:
             value = re.split(r'\s+', value)
             return float(value[0])
         return value
-    
+
     @property
     def galaxy_range(self):
         return self._galaxy_range
@@ -182,7 +182,7 @@ class Config:
 
         x0, y0 = (_read_header(hdu, 'CEN_X', default = mid_x),
                                _read_header(hdu, 'CEN_Y', default = mid_y))
-        
+
         # if self._cen_pos is None:
         #     x0 = data.shape[0] / 2
         #     y0 = data.shape[1] / 2
@@ -228,7 +228,7 @@ class Config:
                     ax.set_ylim(ymax, ymin)
                 xmax = np.max(sma_list) * 1.1
                 ax.set_xlim(0, xmax)
-                
+
             else:
                 ax.plot(sma_list, out_list[type],
                         label=label, linestyle='--', linewidth=0.5)
@@ -365,6 +365,7 @@ class GalfitTask:
     def _galfit_output(self, str: str):
         state = 0
         returncode = 0
+        tmp = ''
         for line in str.split('\n'):
             if state == 1:
                 if line.startswith('======'):
@@ -476,7 +477,7 @@ class GalfitTask:
 
             sersic.effective_radius = round(
                 np.sqrt(tbl['area'][map_label - 1].value))
-            
+
             # Cut the graph to proper size
             # print('Mid: ', sersic.position[0], ' Radius: ', sersic.effective_radius, ' Fig_size: ', 2*mid_x )
             if sersic.position[0] + self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius < 2 * mid_x:

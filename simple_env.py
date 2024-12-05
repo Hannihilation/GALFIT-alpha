@@ -8,6 +8,7 @@ from torch import from_numpy
 import matplotlib.pyplot as plt
 import os
 import shutil
+from astropy.stats import sigma_clipped_stats
 
 # code_state = ['bulge', 'disk', 'bar', 'bulge&disk',
 #               'disk&bar', 'bulge&bar', 'bulge&disk&bar', 'error']
@@ -56,9 +57,15 @@ class GalfitEnv:
             self.mag_maxgap
         size = self._task.config.image_size
         x, y = np.meshgrid(np.linspace(-size/2, size/2, size), np.linspace(-size/2, size/2, size))
-        self._image_weight = np.exp2(-(x**2+y**2)/(size/16)**2)
+        half_weight_size = (config.galaxy_range[1] - config.galaxy_range[0]) / 5
+        self._image_weight = np.exp2(-(x**2+y**2)/half_weight_size**2)
 
-        self._galaxy_range = config.galaxy_range
+        with fits.open(self._task.config.input_file) as hdul:
+            data = np.array(hdul[0].data)
+        sky_mean, sky_median, sky_std = sigma_clipped_stats(data, sigma=3.0, maxiters=5)
+        total_noise = np.sqrt(np.abs(data) + sky_std **2)
+        sigmap = total_noise
+        self._sigma_image = sigmap
 
     def _update_state(self):
         if os.path.exists('./galfit.01'):
@@ -149,8 +156,8 @@ class GalfitEnv:
             residual = np.array(hdus[3].data)
         with fits.open(self._task.config.mask_file) as mask:
             mask_data = mask[0].data
-            
-        chi2 = np.sum(self._image_weight* (1 - mask_data) *np.log(np.abs(residual)))
+
+        chi2 = np.sum(self._image_weight* (1 - mask_data) *np.abs(residual) / self._sigma_image)
         return chi2
 
     @property
