@@ -10,6 +10,7 @@ from matplotlib.gridspec import GridSpec
 import astropy.visualization as vis
 import photutils.isophote as iso
 from photutils.aperture import EllipticalAperture
+# from GalfitS.gsfit import simage_fitter
 
 
 def _read_header(hdu, key, default=None):
@@ -23,7 +24,7 @@ def _read_header(hdu, key, default=None):
 
 
 class Config:
-    def __init__(self, input_file, output_file=None, psf_file=None, sigma_file='none',
+    def __init__(self, input_file, output_file=None, psf_file=None, sigma_file=None,
                  mask_file=None, psf_scale=None, zeropoint=None, pixel_scale=None, galaxy_range = None):
         self._input = StrParam('A', input_file)
         if output_file is None:
@@ -32,9 +33,11 @@ class Config:
         if psf_file == None:
             psf_file = input_file.replace('.fits', '_ep.fits')
         self._psf = StrParam('D', psf_file)
+        if sigma_file is None:
+            sigma_file = 'none'
         self._sigma = StrParam('C', sigma_file)
         if mask_file is None:
-            mask_file = input_file.replace('.fits', '_mm.fits')
+            mask_file = 'none'
         self._mask = StrParam('F', mask_file)
         self._mode = StrParam('P', 0)
         input_file = fits.open(self._input.value)
@@ -129,6 +132,10 @@ class Config:
     def galaxy_range(self):
         return self._galaxy_range
 
+    @galaxy_range.setter
+    def galaxy_range(self, value):
+        self._galaxy_range = value
+
     def __repr__(self) -> str:
         s = ''
         for param in self.parameters:
@@ -168,8 +175,12 @@ class Config:
         ax.imshow(data, cmap='gray', origin='lower', norm=norm)
 
     def _plot_1Dpro(self, hdu, axs, types, label=None, is_origin=False,
-                    is_comp=False, show_iso=False, sky = None, sma = 20, eps = 0.7, pa = 0, minsma = 5, maxsma = None, step=0.05, fix_center=False):
+                    is_comp=False, show_iso=False, sky = None, sma = 10, eps = 0.5, pa = 0, minsma = 5, maxsma = None, step=0.05, fix_center=False):
         data = hdu.data
+        # sma = 10
+        # eps = 0.5
+        # pa = 0
+        print(f'sma, eps, pa = {sma}, {eps}, {pa}')
         if is_origin:
             with fits.open(self.mask_file) as mask:
                 data = np.ma.array(data, mask=(mask[0].data == 1))
@@ -246,16 +257,21 @@ class Config:
             fig.savefig('iso.pdf', format='pdf')
             # fig.show()
 
-    def plot(self, cut_coeff=99.5, pro_1D=True, components=None):
+    def plot(self, cut_coeff=99.5, pro_1D=True, components=None, is_mock = False):
         fig = plt.figure(figsize=(7, 7))
         gs = GridSpec(3, 2, figure=fig, hspace=0, wspace=0)
         axs = np.array([[fig.add_subplot(gs[i, j])
                        for j in range(2)] for i in range(3)])
         if self._galaxy_range is None:
             # print('before: ', self.galaxy_range)
-            GalfitTask(self).init_guess()
+            tmp_task = GalfitTask(self)
+            tmp_task.init_guess()
+            sma = tmp_task._components[1].effective_radius
+            eps = tmp_task._components[1].axis_ratio
+            pa = tmp_task._components[1].position_angle
             # print('after: ', self.galaxy_range)
             # l_margin, r_margin = self.galaxy_range
+        print(self.input_file)
         with fits.open(self.output_file) as model:
             for hdu in model[1:]:
                 type = hdu.header['OBJECT']
@@ -265,17 +281,17 @@ class Config:
                     self._plot_model(hdu, axs[1, 1], cut_coeff=cut_coeff, cut_margin=True)
                     if pro_1D:
                         self._plot_1Dpro(
-                            hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='model')
+                            hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='model',sma=sma,eps=eps,pa=pa)
                 elif type == 'residual map':
                     print(f'Working on {type}')
-                    self._plot_model(hdu, axs[2, 1], cut_coeff=cut_coeff, is_origin=True, cut_margin=True)
+                    self._plot_model(hdu, axs[2, 1], cut_coeff=cut_coeff, is_origin=(not is_mock), cut_margin=True)
                 else:
                     print(f'Working on original data')
                     self._plot_model(
-                        hdu, axs[0, 1], cut_coeff=cut_coeff, is_origin=True, cut_margin=True)
+                        hdu, axs[0, 1], cut_coeff=cut_coeff, is_origin=(not is_mock), cut_margin=True)
                     if pro_1D:
                         self._plot_1Dpro(
-                            hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='origin', is_origin=True, show_iso=True)
+                            hdu, axs[:, 0], ['eps', 'pa', 'mu'], label='origin', is_origin=(not is_mock), show_iso=True,sma=sma,eps=eps,pa=pa)
 
         if components is not None and pro_1D:
             with fits.open(components) as comps:
@@ -316,9 +332,7 @@ class Config:
             plt.savefig(fig_file, format='pdf')
 
 
-class GalfitTask:
-    FIGSIZE_TO_DIAMETER_LIMIT = 5
-
+class Task:
     def __init__(self, config):
         self._config = config
         self._components = []
@@ -331,6 +345,13 @@ class GalfitTask:
     def components(self):
         return self._components
 
+
+class GalfitTask(Task):
+    FIGSIZE_TO_DIAMETER_LIMIT = 5
+
+    def __init__(self, config):
+        super().__init__(config)
+
     def add_component(self, component: Component):
         self._components.append(component)
 
@@ -342,6 +363,18 @@ class GalfitTask:
         for component in self._components:
             s += component.__repr__() + '\n'
         return s
+
+    def read_init_guess(self, file_name):
+        range = None
+        with open(file_name, 'r') as file:
+            line = file.readline()
+            while line:
+                if line.startswith('#  Galaxy Range = '):
+                    range = tuple(map(int, line.split('(')[1].split(')')[0].split(',')))
+                    break
+                line = file.readline()
+        self.config.galaxy_range = range
+        return self.read_component(file_name)
 
     def read_component(self, file_name):
         chi2 = -1
@@ -391,6 +424,8 @@ class GalfitTask:
         return returncode
 
     def run(self, galfit_file=None, galfit_mode=0):
+        if os.path.exists('./galfit.01'):
+            os.remove('./galfit.01')
         self.config.galfit_mode = galfit_mode
         if galfit_file is None:
             galfit_file = self.config._output.value.replace('.fits', '.galfit')
@@ -491,3 +526,43 @@ class GalfitTask:
             sersic.axis_ratio = 1-float(_read_header(file[0], 'ELL_E', default=0.25))
             sersic.position_angle = float(_read_header(file[0], 'ELL_PA', default=0))
             self.add_component(sersic)
+
+
+# class GalfitSConfig:
+#     def __init__(self, input_file, output_file=None, psf_file=None, sigma_file=None,
+#                  mask_file=None, psf_scale=None, zeropoint=None, pixel_scale=None, galaxy_range = None):
+#         with fits.open(input_file) as hdul:
+#             image = hdul[0].data
+#         if psf_file == None:
+#             psf = None
+#         else:
+#             with fits.open(psf_file) as hdul:
+#                 psf = hdul[0].data
+#         if mask_file == None:
+#             mask = None
+#         else:
+#             with fits.open(mask_file) as hdul:
+#                 mask = hdul[0].data
+#         if sigma_file == None:
+#             sigma = None
+#         else:
+#             with fits.open(sigma_file) as hdul:
+#                 sigma = hdul[0].data
+#         self._gsfitter = simage_fitter(image, psf, mask, sigma)
+#         self._galfit_mode = 0
+
+
+# class GalfitSTask(Task):
+#     def __init__(self, config):
+#         super().__init__(config)
+
+#     def run(self, galfit_file=None, galfit_mode=0):
+#         self.config.galfit_mode = galfit_mode
+#         modelnames = []
+#         theta0s = []
+#         bounds = []
+#         for component in self.components:
+#             modelnames.append(component.type)
+#             theta0s.append(component.theta0)
+#             bounds.append(component.bound)
+

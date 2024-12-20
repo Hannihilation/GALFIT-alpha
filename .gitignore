@@ -12,4 +12,6 @@ __pycache__/
 GalfitS/
 *.pdf
 *.ipynb
-mock_galaxy/
+*.dat
+*.png
+mock_galaxy*/

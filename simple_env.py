@@ -36,17 +36,16 @@ class GalfitEnv:
         self._output_file = self._task.config.output_file.replace(
             '.fits', '.save')
         if os.path.exists(init_file) and os.path.exists(self._output_file):
-            self._chi2 = self._task.read_component(init_file)
+            self._chi2 = self._task.read_init_guess(init_file)
         else:
             self._task.init_guess()
-            if os.path.exists('./galfit.01'):
-                os.remove('./galfit.01')
             crash = self._task.run()
             if crash:
                 raise ValueError('Galfit crashed at init guess!')
             self._chi2 = self._task.read_component('./galfit.01')
             shutil.move(self._task.config._output.value, self._output_file)
             with open(init_file, 'w') as file:
+                print(f'#  Galaxy Range = {config.galaxy_range}', file=file)
                 print(f'#  Chi^2/nu = {self._chi2}', file=file)
                 print(self._task, file=file)
 
@@ -69,8 +68,6 @@ class GalfitEnv:
             self.mag_maxgap
 
     def _update_state(self):
-        if os.path.exists('./galfit.01'):
-            os.remove('./galfit.01')
         crash = self._task.run()
         self._sky_state = 0 if self._task.components[0].__background__.trainable else 1
         if crash:
@@ -193,7 +190,7 @@ class GalfitEnv:
         # plt.imshow(np.log(np.abs(image.numpy()[0])))
         # plt.show()
         (l_margin, r_margin) = self._task.config.galaxy_range
-        image = transforms.Resize(self.image_size)(image[l_margin:r_margin, l_margin:r_margin]).numpy()
+        image = transforms.Resize(self.image_size)(image[:, l_margin:r_margin, l_margin:r_margin]).numpy()
         # plt.imshow(np.log(np.abs(image[0])))
         # plt.show()
         return np.array([self.current_code, self._sky_state], dtype=np.float64), image

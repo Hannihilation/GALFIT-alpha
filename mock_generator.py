@@ -4,6 +4,9 @@ from astropy.io import fits
 import numpy as np
 import numpy.random as random
 import os
+from astropy.table import Table
+from scipy.stats import gaussian_kde
+import matplotlib.pyplot as plt
 
 
 class ComponentGenerator:
@@ -12,10 +15,13 @@ class ComponentGenerator:
         self.mag_limit = mag_limit
         self.radius_limit = radius_limit
         self.pa_baseline = None
+        self.ra_baseline = None
         self.count = None
+        self.kde = self._read_distrubution('gao+2019table1.dat')
 
     def __call__(self, count):
         self.pa_baseline = random.uniform(0, 180)
+        self.now = 0
         self.count = count
         return self
 
@@ -25,36 +31,62 @@ class ComponentGenerator:
     def __next__(self):
         if self.count is None or self.count < 0:
             raise ValueError('count is not set properly')
-        if self.count > 0:
-            self.count -= 1
+        if self.now < self.count:
+            self.now += 1
             return self._generate()
         else:
             self.pa_baseline = None
+            self.ra_baseline = None
             self.count = None
             raise StopIteration
 
     def _generate(self):
         sersic = Sersic()
         sersic.magnitude = random.uniform(*self.mag_limit)
-        sersic.effective_radius = random.uniform(*self.radius_limit)
         sersic.position = (self.cen_position[0] + random.uniform(-1, 1),
                            self.cen_position[1] + random.uniform(-1, 1))
         sersic.position_angle = (
             self.pa_baseline + random.uniform(-20, 20)) % 180
-        if self.count == 2:
+        if self.now == 3:
             sersic.set_sersic_index(0.5, False)  # bar
+            sersic.effective_radius = random.uniform(1.5, 2) * self.ra_baseline
             sersic.axis_ratio = random.uniform(0.1, 0.5)
-        elif self.count == 1:
+        elif self.now == 2:
             sersic.set_sersic_index(1, False)  # disk
-            self.radius_limit = (self.radius_limit[0], sersic.effective_radius)
+            sersic.effective_radius = random.uniform(1.5, 2) * self.ra_baseline
             sersic.axis_ratio = random.uniform(0.5, 1)
-        elif self.count == 0:
+        elif self.now == 1:
             if random.uniform() < 0.5:
                 sersic.set_sersic_index(4, False)
             else:
                 sersic.set_sersic_index(random.uniform(2.5, 7), True)
+                # sersic.set_sersic_index(self.kde['n'].resample(1), True)
+            sersic.effective_radius = np.abs(self.kde['r_e'].resample(1)[0, 0])
+            self.ra_baseline = sersic.effective_radius
             sersic.axis_ratio = random.uniform(0.5, 1)
         return sersic
+
+    def _read_distrubution(self, file):
+        tb = Table.read(file, format='ascii.cds')
+
+        B2T = tb['B/T']   # Bulge-to-total ratio
+        mu = tb['mu']     # Surface brightness
+        n = tb['n']       # Sersic index
+        r_e = tb['reff']  # Bulge effective radius
+        e = tb['e']       # bulge ellipticity
+        D2T = tb['D/T']   # Disk-to-total ratio
+        b2T = tb['bar/T'] # Bar-to-total ratio
+        kde_r_e = gaussian_kde(r_e / 0.396)
+        kde_n = gaussian_kde(n)
+        kde_e = gaussian_kde(e)
+        kde_B2T = gaussian_kde(B2T)
+        x = np.linspace(min(B2T), max(B2T), 1000)
+        plt.hist(B2T, bins=100, density=True)
+        plt.savefig('B2T_hist.png')
+        y = kde_B2T(x)
+        plt.plot(x, y, 'r-')
+        plt.savefig('B2T.png')
+        return {'r_e': kde_r_e, 'n': kde_n, 'e': kde_e}
 
 
 class GalaxyGenerator:
@@ -77,12 +109,9 @@ class GalaxyGenerator:
                         zeropoint=24)
         task = GalfitTask(config)
         sky = Sky()
-        sky.background = random.uniform(self.sky_limit)
+        sky.background = random.uniform(*self.sky_limit)
         task.add_component(sky)
         count = random.randint(1, 4)
-        if count == 3:
-            print('with bar')
-        # count = 3
         for comp in self.com_gen(count):
             task.add_component(comp)
         return task
@@ -105,10 +134,10 @@ class GalaxyGenerator:
             raise StopIteration
 
 
-def noise_generator(data, sky_rms):
+def noise_generator(data, gain, sky_rms):
     shape = data.shape
     # calculate poisson noise for model
-    poisson = np.random.poisson(data)
+    poisson = np.random.poisson(data * gain) / gain
     # use sky rms to generate mock sky
     mock_sky = np.random.randn(shape[0], shape[1]) * sky_rms
     # final mock data = model with poisson noise + sky noise
@@ -117,7 +146,9 @@ def noise_generator(data, sky_rms):
 
 
 def gen_data(count):
-    out_dir = './mock_galaxy'
+    out_dir = './mock_galaxy_test'
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
     mag_limit = (12, 18)
     radius_limit = (10, 40)
     sky_limit = (0.8, 1.6)
@@ -132,12 +163,12 @@ def gen_data(count):
         task.run(galfit_mode=1)
         with fits.open(task.config.output_file) as hdul:
             data = hdul[0].data
-        data = noise_generator(data, 0.01)
+        data = noise_generator(data, 1, 0.1)
         hdu = fits.PrimaryHDU(data)
         hdu.writeto(task.config.output_file, overwrite=True)
 
 
-gen_data(5)
+gen_data(1)
 
 
 # def use_galfit_to_generate_mock_galaxy(input_par):

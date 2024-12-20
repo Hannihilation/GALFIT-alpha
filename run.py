@@ -44,7 +44,8 @@ def plot_final_image(log_file, train_size):
             input_file = input_file.strip('\n')
             config = Config(input_file=input_file, psf_file='S82/psf_r_cut65x65.fits',
                             pixel_scale=0.396 / 3600, psf_scale=1, zeropoint=24)
-            config.plot(pro_1D=True)
+            print(f'Working on {input_file}')
+            config.plot(pro_1D=True, is_mock = True)
 
 
 def gen_data(data, size):
@@ -120,7 +121,8 @@ if __name__ == '__main__':
     if args.summary:
         sum(args.batch_size)
     elif args.plot_figure:
-        plot_final_image('./run.log', args.train_size)
+        # plot_final_image('./run.log', args.train_size)
+        plot_final_image('./test_data', 20)
     else:
         data = gen_data(args.data, args.train_size)
         print(*(d[0] for d in data[0]), sep='\n')

@@ -9,3 +9,9 @@
   -
 - [ ] 增加comp后初始条件如何程序化给出
 - reward:
+
+
+- 统计数据：
+component数目；
+总共的magnitude是否一致；
+单个的sersic的 index和radius （两个源看bulge；三个看bulge和bar）

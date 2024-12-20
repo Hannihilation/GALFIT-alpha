@@ -62,6 +62,10 @@ class Component:
         self.__output_option__ = StrParam('Z', 0)
 
     @property
+    def type(self):
+        return self.__type__
+
+    @property
     def output_option(self):
         return self.__output_option__.value
 
@@ -196,28 +200,10 @@ class Sersic(Anisotropic):
         self.__axis_ratio__.value = ratio
 
     @property
-    def state(self):
-        if self.__sersic_index__.trainable:
-            return 0
-        elif self.sersic_index == 1:
-            return 1
-        elif self.sersic_index == 4:
-            return 2
-        elif self.sersic_index == 0.5:
-            return 3
-        else:
-            return -1
-
-    @state.setter
-    def state(self, state: int):
-        if state == 0:
-            self.set_sersic_index(None, True)
-        elif state == 1:
-            self.set_sersic_index(1, False)
-        elif state == 2:
-            self.set_sersic_index(4, False)
-        elif state == 3:
-            self.set_sersic_index(0.5, False)
+    def theta0(self):
+        out = [self.position[0], self.position[1], self.axis_ratio, self.position_angle,
+                self.effective_radius, self.sersic_index, self.magnitude]
+        return out
 
     def set_magnitude(self, magnitude: float = None, trainable=True):
         """
@@ -1029,18 +1015,9 @@ class Sky(Component):
         self.__gradient_y__.value = sky_gradient_y
 
     @property
-    def state(self):
-        if self.__background__.trainable:
-            return 1
-        else:
-            return 0
-
-    @state.setter
-    def state(self, state: int):
-        if state == 0:
-            self.__background__.trainable = False
-        else:
-            self.__background__.trainable = True
+    def theta0(self):
+        out = [self.background, self.gradient_x, self.gradient_y]
+        return out
 
     def set_background(self, sky_background: float = None, trainable=True):
         """
