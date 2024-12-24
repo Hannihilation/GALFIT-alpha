@@ -1,4 +1,4 @@
-from task import Config
+from task import GalfitConfig as Config
 from simple_env import GalfitEnv
 from galfit_alpha import GalfitAlpha
 from DQL import DeepQLearning
@@ -16,10 +16,10 @@ parser.add_argument('-m', '--multithread', type=int, default=1,
 parser.add_argument('-t', '--train-size', type=int,
                     default=10, help='set train size', metavar='size')
 parser.add_argument('-b', '--batch-size', type=int,
-                    default=32, help='set batch size', metavar='size')
-parser.add_argument('-e', '--epoch', type=int, default=1000,
+                    default=128, help='set batch size', metavar='size')
+parser.add_argument('-e', '--epoch', type=int, default=5000,
                     help='set epoch', metavar='epoch')
-parser.add_argument('-ls', '--learning-step', type=int, default=10,
+parser.add_argument('-ls', '--learning-step', type=int, default=100,
                     help='set steps between learning', metavar='step')
 parser.add_argument('-o', '--output-model', type=str,
                     default='./model.pkl', help='set output model path', metavar='path')

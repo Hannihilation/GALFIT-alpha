@@ -1,5 +1,5 @@
 from components import Sky, Sersic
-from task import GalfitTask, Config
+from task import GalfitTask, GalfitConfig as Config
 from astropy.io import fits
 import numpy as np
 import numpy.random as random
@@ -7,7 +7,14 @@ import os
 from astropy.table import Table
 from scipy.stats import gaussian_kde
 import matplotlib.pyplot as plt
+from astropy.cosmology import FlatLambdaCDM
 
+
+def flux2mag(flux):
+    return -2.5 * np.log10(flux) + 24
+
+def mag2flux(mag):
+    return 10 ** ((24 - mag) / 2.5)
 
 class ComponentGenerator:
     def __init__(self, cen_position, mag_limit, radius_limit):
@@ -16,10 +23,27 @@ class ComponentGenerator:
         self.radius_limit = radius_limit
         self.pa_baseline = None
         self.ra_baseline = None
+        self.mag = None
         self.count = None
         self.kde = self._read_distrubution('gao+2019table1.dat')
 
     def __call__(self, count):
+        total_flux = mag2flux(random.uniform(*self.mag_limit))
+        if count == 1:
+            self.mag = [flux2mag(total_flux)]
+        elif count == 2:
+            ratio = self.kde['ratio_2c'].resample(1)[0, 0]
+            while ratio < 0 or ratio > 1:
+                ratio = self.kde['ratio_2c'].resample(1)[0, 0]
+            self.mag = [flux2mag(total_flux * ratio), flux2mag(total_flux * (1 - ratio))]
+        elif count == 3:
+            ratio = self.kde['ratio_3c'].resample(1)[:, 0]
+            while ratio[0] < 0 or ratio[1] < 0 or ratio[0]+ratio[1] > 1:
+                ratio = self.kde['ratio_3c'].resample(1)[:, 0]
+            self.mag = [flux2mag(total_flux * ratio[0]), flux2mag(total_flux * ratio[1]), flux2mag(total_flux * (1 - ratio[0] - ratio[1]))]
+        self.ra_baseline = self.kde['r_e'].resample(1)[0, 0]
+        while self.ra_baseline < self.radius_limit[0] or self.ra_baseline > self.radius_limit[1]:
+            self.ra_baseline = self.kde['r_e'].resample(1)[0, 0]
         self.pa_baseline = random.uniform(0, 180)
         self.now = 0
         self.count = count
@@ -37,12 +61,13 @@ class ComponentGenerator:
         else:
             self.pa_baseline = None
             self.ra_baseline = None
+            self.mag = None
             self.count = None
             raise StopIteration
 
     def _generate(self):
         sersic = Sersic()
-        sersic.magnitude = random.uniform(*self.mag_limit)
+        sersic.magnitude = self.mag[self.now-1]
         sersic.position = (self.cen_position[0] + random.uniform(-1, 1),
                            self.cen_position[1] + random.uniform(-1, 1))
         sersic.position_angle = (
@@ -60,9 +85,7 @@ class ComponentGenerator:
                 sersic.set_sersic_index(4, False)
             else:
                 sersic.set_sersic_index(random.uniform(2.5, 7), True)
-                # sersic.set_sersic_index(self.kde['n'].resample(1), True)
-            sersic.effective_radius = np.abs(self.kde['r_e'].resample(1)[0, 0])
-            self.ra_baseline = sersic.effective_radius
+            sersic.effective_radius = self.ra_baseline
             sersic.axis_ratio = random.uniform(0.5, 1)
         return sersic
 
@@ -72,21 +95,41 @@ class ComponentGenerator:
         B2T = tb['B/T']   # Bulge-to-total ratio
         mu = tb['mu']     # Surface brightness
         n = tb['n']       # Sersic index
-        r_e = tb['reff']  # Bulge effective radius
+        r_e = tb['reff'] / 0.396  # Bulge effective radius
         e = tb['e']       # bulge ellipticity
         D2T = tb['D/T']   # Disk-to-total ratio
         b2T = tb['bar/T'] # Bar-to-total ratio
-        kde_r_e = gaussian_kde(r_e / 0.396)
-        kde_n = gaussian_kde(n)
-        kde_e = gaussian_kde(e)
-        kde_B2T = gaussian_kde(B2T)
-        x = np.linspace(min(B2T), max(B2T), 1000)
-        plt.hist(B2T, bins=100, density=True)
-        plt.savefig('B2T_hist.png')
-        y = kde_B2T(x)
-        plt.plot(x, y, 'r-')
-        plt.savefig('B2T.png')
-        return {'r_e': kde_r_e, 'n': kde_n, 'e': kde_e}
+
+        tb2 = Table.read('./cgs_tab1.dat', format='ascii.cds')
+        # Get the distance
+        disList = []
+        for i, n in enumerate(tb['Name']):
+            fltr = tb2['Name'] == n
+            if np.sum(fltr) == 1:
+                disList.append(float(tb2['Dis'][fltr][0]))
+            else:
+                disList.append(np.nan)
+        disList = np.array(disList)
+
+        cosmo = FlatLambdaCDM(H0=70, Om0=0.3)
+        z = 0.05
+        print(f'The angular diameter distance at {z} is: ', cosmo.angular_diameter_distance(z))
+
+        # Scale the effective radius to z=0.05
+        r_e_scaled = r_e * disList / cosmo.angular_diameter_distance(z)
+        r_e_scaled = r_e_scaled[~np.isnan(r_e_scaled)]
+
+        kde_r_e = gaussian_kde(r_e_scaled)
+        ind = [i for i, b in enumerate(b2T) if b == 0]
+        kde_ratio_2c = gaussian_kde(np.array([B2T[i] for i in ind]))
+        kde_ratio_3c = gaussian_kde(np.array([[B2T[i], D2T[i]] for i in range(len(B2T)) if i not in ind]).T)
+        # print(min(r_e), max(r_e))
+        # x = np.linspace(-2, 175, 1000)
+        # plt.hist(r_e_scaled, bins=100, density=True)
+        # y = kde_r_e(x)
+        # plt.plot(x, y, 'r-')
+        # plt.savefig('r_e_scaled.png')
+        return {'r_e': kde_r_e, 'ratio_2c': kde_ratio_2c, 'ratio_3c': kde_ratio_3c}
 
 
 class GalaxyGenerator:
@@ -146,11 +189,11 @@ def noise_generator(data, gain, sky_rms):
 
 
 def gen_data(count):
-    out_dir = './mock_galaxy_test'
+    out_dir = './mock_galaxy'
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
-    mag_limit = (12, 18)
-    radius_limit = (10, 40)
+    mag_limit = (12, 17)
+    radius_limit = (1.5, 75)
     sky_limit = (0.8, 1.6)
     image_scale = (300, 300)
     psf_file = './S82/psf_r_cut65x65.fits'
@@ -163,12 +206,12 @@ def gen_data(count):
         task.run(galfit_mode=1)
         with fits.open(task.config.output_file) as hdul:
             data = hdul[0].data
-        data = noise_generator(data, 1, 0.1)
+        data = noise_generator(data, 4.5, 0.1)
         hdu = fits.PrimaryHDU(data)
         hdu.writeto(task.config.output_file, overwrite=True)
 
 
-gen_data(1)
+gen_data(100)
 
 
 # def use_galfit_to_generate_mock_galaxy(input_par):

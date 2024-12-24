@@ -10,7 +10,7 @@ from matplotlib.gridspec import GridSpec
 import astropy.visualization as vis
 import photutils.isophote as iso
 from photutils.aperture import EllipticalAperture
-# from GalfitS.gsfit import simage_fitter
+from GalfitS.gsfit import simage_fitter
 
 
 def _read_header(hdu, key, default=None):
@@ -24,6 +24,12 @@ def _read_header(hdu, key, default=None):
 
 
 class Config:
+    def __init__(self):
+        pass
+
+
+
+class GalfitConfig(Config):
     def __init__(self, input_file, output_file=None, psf_file=None, sigma_file=None,
                  mask_file=None, psf_scale=None, zeropoint=None, pixel_scale=None, galaxy_range = None):
         self._input = StrParam('A', input_file)
@@ -419,6 +425,7 @@ class GalfitTask(Task):
                 tmp = line + '\n'
                 state = 2
             elif line.startswith('   Doh!  GALFIT crashed'):
+                print('GALFIT crashed!')
                 returncode = 1
         print(tmp)
         return returncode
@@ -454,7 +461,7 @@ class GalfitTask(Task):
             sky.background = np.mean(bkg.background)
             print('Estimated background: ', sky.background)
             self.add_component(sky)
-            threshold = 5 * bkg.background_rms
+            threshold = 3 * bkg.background_rms
 
             ### 下面这段convolution是否必要？###
             from astropy.convolution import convolve
@@ -476,7 +483,7 @@ class GalfitTask(Task):
             segment_map = finder(convolved_data, threshold)
             # print(segment_map)
             if (segment_map == None):
-                raise ValueError("Source finding failure. Try reduce threshold.")
+                raise ValueError(f"Source finding failure in {self.config._input.value}. Try reduce threshold.")
 
             cat = SourceCatalog(data, segment_map,
                                 convolved_data=convolved_data)
@@ -518,51 +525,61 @@ class GalfitTask(Task):
 
             # Cut the graph to proper size
             # print('Mid: ', sersic.position[0], ' Radius: ', sersic.effective_radius, ' Fig_size: ', 2*mid_x )
-            if sersic.position[0] + self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius < 2 * mid_x:
-                self.config._galaxy_range = (round(sersic.position[1] - self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius), round(sersic.position[0] + self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius))
-            else:
-                self.config._galaxy_range = (0, _read_header(file[0], 'NAXIS1'))
+
+            left_margin = round(sersic.position[0] - self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius)
+            right_margin = round(sersic.position[0] + self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius)
+            if left_margin<0:
+                left_margin = 0
+            if right_margin > _read_header(file[0], 'NAXIS1')-1:
+                right_margin = _read_header(file[0], 'NAXIS1')-1
+            self.config._galaxy_range = (left_margin, right_margin)
+
+            # if sersic.position[0] + self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius < 2 * mid_x:
+            #     self.config._galaxy_range = (round(sersic.position[1] - self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius), round(sersic.position[0] + self.FIGSIZE_TO_DIAMETER_LIMIT * sersic.effective_radius))
+            # else:
+            #     self.config._galaxy_range = (0, _read_header(file[0], 'NAXIS1'))
 
             sersic.axis_ratio = 1-float(_read_header(file[0], 'ELL_E', default=0.25))
             sersic.position_angle = float(_read_header(file[0], 'ELL_PA', default=0))
+            sersic.set_sersic_index(4, True)
             self.add_component(sersic)
 
 
-# class GalfitSConfig:
-#     def __init__(self, input_file, output_file=None, psf_file=None, sigma_file=None,
-#                  mask_file=None, psf_scale=None, zeropoint=None, pixel_scale=None, galaxy_range = None):
-#         with fits.open(input_file) as hdul:
-#             image = hdul[0].data
-#         if psf_file == None:
-#             psf = None
-#         else:
-#             with fits.open(psf_file) as hdul:
-#                 psf = hdul[0].data
-#         if mask_file == None:
-#             mask = None
-#         else:
-#             with fits.open(mask_file) as hdul:
-#                 mask = hdul[0].data
-#         if sigma_file == None:
-#             sigma = None
-#         else:
-#             with fits.open(sigma_file) as hdul:
-#                 sigma = hdul[0].data
-#         self._gsfitter = simage_fitter(image, psf, mask, sigma)
-#         self._galfit_mode = 0
+class GalfitSConfig(Config):
+    def __init__(self, input_file, output_file=None, psf_file=None, sigma_file=None,
+                 mask_file=None, psf_scale=None, zeropoint=None, pixel_scale=None, galaxy_range = None):
+        with fits.open(input_file) as hdul:
+            image = hdul[0].data
+        if psf_file == None:
+            psf = None
+        else:
+            with fits.open(psf_file) as hdul:
+                psf = hdul[0].data
+        if mask_file == None:
+            mask = None
+        else:
+            with fits.open(mask_file) as hdul:
+                mask = hdul[0].data
+        if sigma_file == None:
+            sigma = None
+        else:
+            with fits.open(sigma_file) as hdul:
+                sigma = hdul[0].data
+        self._gsfitter = simage_fitter(image, psf, mask, sigma)
+        self._galfit_mode = 0
 
 
-# class GalfitSTask(Task):
-#     def __init__(self, config):
-#         super().__init__(config)
+class GalfitSTask(Task):
+    def __init__(self, config):
+        super().__init__(config)
 
-#     def run(self, galfit_file=None, galfit_mode=0):
-#         self.config.galfit_mode = galfit_mode
-#         modelnames = []
-#         theta0s = []
-#         bounds = []
-#         for component in self.components:
-#             modelnames.append(component.type)
-#             theta0s.append(component.theta0)
-#             bounds.append(component.bound)
+    def run(self, galfit_file=None, galfit_mode=0):
+        self.config.galfit_mode = galfit_mode
+        modelnames = []
+        theta0s = []
+        bounds = []
+        for component in self.components:
+            modelnames.append(component.type)
+            theta0s.append(component.theta0)
+            bounds.append(component.bound)
 

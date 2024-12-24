@@ -1,5 +1,5 @@
 import numpy as np
-from task import GalfitTask, Config
+from task import GalfitTask, GalfitConfig as Config
 from components import *
 from copy import deepcopy
 from astropy.io import fits

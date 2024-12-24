@@ -1,7 +1,7 @@
 from weakref import WeakValueDictionary
 from typing import Union
 import numpy as np
-from task import GalfitTask, Config
+from task import GalfitTask, GalfitConfig as Config
 from components import *
 from copy import deepcopy
 import shutil
